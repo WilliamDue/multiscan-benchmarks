@@ -2,7 +2,7 @@
 This repository will explore performance differences in Futhark  and CUDA in respect to Multiscan.
 
 ## Multiscan
-The Single-Pass scan [1] allows for the fusion of multiple  map-scans ending in a single map-reduce or map-scatter. This construct will be refered to as a Multiscan.
+The Single-Pass scan [^1] allows for the fusion of multiple  map-scans ending in a single map-reduce or map-scatter. This construct will be refered to as a Multiscan.
 
 For the ability to fuse two or more map-scans then it should hold for any neighbouring pair of map-scans in a sequence of map-scans that:
 * The first map-scans output is used as input in the second map-scan.
