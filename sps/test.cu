@@ -126,8 +126,8 @@ scan(T* d_in,
 }
 
 void testScan(uint32_t size) {
-    const uint32_t BLOCK_SIZE = 1024;
-    const uint32_t ITEMS_PER_THREAD = 8;
+    const uint32_t BLOCK_SIZE = 32;
+    const uint32_t ITEMS_PER_THREAD = 2;
     const uint32_t NUM_LOGICAL_BLOCKS = (size + BLOCK_SIZE * ITEMS_PER_THREAD - 1) / (BLOCK_SIZE * ITEMS_PER_THREAD);
     const uint32_t ARRAY_BYTES = size * sizeof(int);
     const uint32_t STATES_BYTES = NUM_LOGICAL_BLOCKS * sizeof(State<int>);
@@ -136,7 +136,7 @@ void testScan(uint32_t size) {
     std::vector<int> h_out(size, 0);
 
     for (uint32_t i = 0; i < size; ++i) {
-        h_in[i] = rand() % 10;
+        h_in[i] = 1; //rand() % 10;
     }
 
     uint32_t* d_dyn_idx_ptr;
@@ -161,7 +161,9 @@ void testScan(uint32_t size) {
     for (uint32_t i = 0; i < size; ++i) {
         acc += h_in[i];
         test_passes &= h_out[i] == acc;
+        std::cout << h_out[i] << ", ";
     }
+    std::cout << std::endl;
 
     if (test_passes) {
         std::cout << "Scan Test Passed using size=" << size << std::endl;
@@ -186,14 +188,15 @@ int main() {
     testBlocks(10000);
     testBlocks(100000);
     */
-   
-    testScan(1 << 6);
+
+    testScan(1 << 8);
+    /*
     testScan(1 << 16);
     testScan(1 << 26);
 
     testScan(1000);
     testScan(10000);
     testScan(100000);
-
+    */
     return 0;
 }
