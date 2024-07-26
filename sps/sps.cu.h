@@ -153,13 +153,12 @@ struct State {
 template<typename T>
 struct Pair {
     T value;
-    uint8_t flag;
+    uint8_t status_and_flag;
 
     __host__ __device__ Pair(State<T> state, T ne) {
-        bool is_invalid = state.status == Invalid;
         bool is_aggregate = state.status == Aggregate;
         bool is_prefix = state.status == Prefix;
-        flag = !is_aggregate | (is_invalid << 1) | (is_prefix << 2);
+        status_and_flag = !is_aggregate | (state.status << 1);
 
         value = ne;
         if (is_aggregate) {
@@ -169,44 +168,38 @@ struct Pair {
         }
     }
 
-    __host__ __device__ Pair(T value, uint8_t flag) : value(value), flag(flag) { }
+    __host__ __device__ Pair(T value, Status status) : value(value), status_and_flag(status) { }
 
-    __host__ __device__ Pair(T ne) : value(ne), flag(3) { }
+    __host__ __device__ Pair(T value, uint8_t status_and_flag) : value(value), status_and_flag(status_and_flag) { }
 
-    __host__ __device__ Pair() : value(), flag(3) { }
+    __host__ __device__ Pair(T ne) : value(ne), status_and_flag(Invalid) { }
 
-    __host__ __device__ Pair(const Pair<T>& other) : value(other.value), flag(other.flag) { }
+    __host__ __device__ Pair() : value(), status_and_flag(Invalid) { }
 
-    __host__ __device__ Pair(const volatile Pair<T>& other) : value(other.value), flag(other.flag) { }
+    __host__ __device__ Pair(const Pair<T>& other) : value(other.value), status_and_flag(other.status_and_flag) { }
+
+    __host__ __device__ Pair(const volatile Pair<T>& other) : value(other.value), status_and_flag(other.status_and_flag) { }
 
     __host__ __device__ bool inline Flag() {
-        return (bool) flag & 1;
+        return status_and_flag & 1;
     }
 
-    __host__ __device__ bool inline IsInvalid() {
-        return (bool) flag & 2;
-    }
-
-    __host__ __device__ bool inline IsPrefix() {
-        return (bool) flag & 4;
+    __host__ __device__ bool inline Status() {
+        return status_and_flag >> 1;
     }
 
     __host__ __device__ bool inline Flag() const volatile {
-        return (bool) flag & 1;
+        return status_and_flag & 1;
     }
 
-    __host__ __device__ bool inline IsInvalid() const volatile {
-        return (bool) flag & 2;
-    }
-
-    __host__ __device__ bool inline IsPrefix() const volatile {
-        return (bool) flag & 4;
+    __host__ __device__ bool inline Status() const volatile {
+        return status_and_flag >> 1;
     }
 
     __host__ __device__ inline Pair<T>& operator=(const Pair<T>& other) {
         if (this != &other) {
             value = other.value;
-            flag = other.flag;
+            status_and_flag = other.status_and_flag;
         }
         return *this;
     }
@@ -214,7 +207,7 @@ struct Pair {
     __host__ __device__ inline Pair<T>& operator=(const volatile Pair<T>& other) {
         if (this != &other) {
             value = other.value;
-            flag = other.flag;
+            status_and_flag = other.status_and_flag;
         }
         return *this;
     }
@@ -222,7 +215,7 @@ struct Pair {
     __host__ __device__ inline volatile Pair<T>& operator=(const Pair<T>& other) volatile {
         if (this != &other) {
             value = other.value;
-            flag = other.flag;
+            status_and_flag = other.status_and_flag;
         }
         return *this;
     }
@@ -240,7 +233,7 @@ scanWarp(volatile Pair<T>* shmem,
         if ((h = 1 << d) <= lane) {
             Pair<T> a = shmem[threadIdx.x - h];
             Pair<T> b = shmem[threadIdx.x];
-            shmem[threadIdx.x] = Pair<T>(b.Flag() ? b.value : op(a.value, b.value), a.flag | b.flag);
+            shmem[threadIdx.x] = Pair<T>(b.Flag() ? b.value : op(a.value, b.value), (a.status_and_flag & 1) | b.status_and_flag);
         }
     }
     return shmem[threadIdx.x];
@@ -270,6 +263,7 @@ decoupledLookbackScan(State<T>* states,
         states[dyn_idx].status = Aggregate;
     }
 
+
     __syncthreads();
 
     T prefix = ne;
@@ -277,7 +271,7 @@ decoupledLookbackScan(State<T>* states,
         I lookback_idx = dyn_idx - threadIdx.x - 1;
         I lookback_warp = 0;
 
-        while (true) {
+        do {
             if (threadIdx.x < dyn_idx && lookback_warp <= lookback_idx) {
                 shmem_states[threadIdx.x] = Pair<T>(states[lookback_idx - lookback_warp], ne);
             } else {
@@ -286,17 +280,14 @@ decoupledLookbackScan(State<T>* states,
 
             scanWarp<T, I, OP>(shmem_states, op, lane);
 
-            if (shmem_states[WARP - 1].IsInvalid())
+            if (shmem_states[WARP - 1].Status() == Invalid)
                 continue;
                 
             if (is_first)
                 prefix = op(shmem_states[WARP - 1].value, prefix);
-
-            if (shmem_states[WARP - 1].IsPrefix())
-                break;
             
             lookback_warp -= WARP;
-        } 
+        } while (!shmem_states[WARP - 1].Status() == Prefix);
     }
 
     if (is_first)
