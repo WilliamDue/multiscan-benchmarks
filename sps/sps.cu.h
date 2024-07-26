@@ -125,21 +125,3 @@ scanBlock(T shmem[ITEMS_PER_THREAD * BLOCK_SIZE],
     
     addAuxBlockScan<T, I, OP, BLOCK_SIZE, ITEMS_PER_THREAD>(shmem, shmem_aux, op);
 }
-
-
-template<typename T, typename I, typename OP, I BLOCK_SIZE, I ITEMS_PER_THREAD>
-__global__ void scanBlocks(T* d_in,
-                           T* d_out,
-                           OP op,
-                           T ne,
-                           const I size) {
-    __shared__ T block[ITEMS_PER_THREAD * BLOCK_SIZE];
-	volatile __shared__ T block_aux[BLOCK_SIZE];
-    I glb_offs = blockIdx.x * BLOCK_SIZE * ITEMS_PER_THREAD;
-
-    glbToShmemCpy<T, I, ITEMS_PER_THREAD>(glb_offs, size, ne, d_in, block);
-
-    scanBlock<T, I, OP, BLOCK_SIZE, ITEMS_PER_THREAD>(block, block_aux, op, ne);
-    
-    shmemToGlbCpy<T, I, ITEMS_PER_THREAD>(glb_offs, size, d_out, block);
-}

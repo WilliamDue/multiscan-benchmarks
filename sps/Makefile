@@ -1,15 +1,16 @@
 COMPILER?=nvcc
-FLAGS?=-O0 --std=c++14
+FLAGS?=-O3 --std=c++14
+TEST=test
 
-default: main run
+default: $(TEST) run
 
 .PHONY: clean run
 
-main: main.cu sps.cu.h
+$(TEST): $(TEST).cu sps.cu.h
 	$(COMPILER) $(FLAGS) -o $@ $<
 
-run: main
+run: $(TEST)
 	./$<
 
 clean:
-	rm -f main
+	rm -f $(TEST)
