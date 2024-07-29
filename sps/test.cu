@@ -43,7 +43,7 @@ scanBlocks(T* d_in,
            OP op,
            T ne,
            const I size) {
-    __shared__ T block[ITEMS_PER_THREAD * BLOCK_SIZE];
+    volatile __shared__ T block[ITEMS_PER_THREAD * BLOCK_SIZE];
 	volatile __shared__ T block_aux[BLOCK_SIZE];
     I glb_offs = blockIdx.x * BLOCK_SIZE * ITEMS_PER_THREAD;
 
@@ -105,12 +105,12 @@ template<typename T, typename I, typename OP, I BLOCK_SIZE, I ITEMS_PER_THREAD>
 __global__ void
 scan(T* d_in,
      T* d_out,
-     State<T>* states,
+     volatile State<T>* states,
      I size,
      OP op,
      const T ne,
-     I* dyn_idx_ptr) {
-    __shared__ T block[ITEMS_PER_THREAD * BLOCK_SIZE];
+     volatile I* dyn_idx_ptr) {
+    volatile __shared__ T block[ITEMS_PER_THREAD * BLOCK_SIZE];
 	volatile __shared__ T block_aux[BLOCK_SIZE];
     
     I dyn_idx = dynamicIndex<I>(dyn_idx_ptr);
@@ -119,10 +119,11 @@ scan(T* d_in,
     glbToShmemCpy<T, I, ITEMS_PER_THREAD>(glb_offs, size, ne, d_in, block);
 
     scanBlock<T, I, OP, ITEMS_PER_THREAD>(block, block_aux, op, ne);
-    
+
     decoupledLookbackScan<T, I, OP, ITEMS_PER_THREAD>(states, block, op, ne, dyn_idx);
 
     shmemToGlbCpy<T, I, ITEMS_PER_THREAD>(glb_offs, size, d_out, block);
+    
 }
 
 void testScan(uint32_t size) {
@@ -136,13 +137,14 @@ void testScan(uint32_t size) {
     std::vector<int> h_out(size, 0);
 
     for (uint32_t i = 0; i < size; ++i) {
-        h_in[i] = 1; //rand() % 10;
+        h_in[i] = rand() % 10;
     }
 
     uint32_t* d_dyn_idx_ptr;
     int *d_in, *d_out;
     State<int>* d_states;
     gpuAssert(cudaMalloc((void**)&d_dyn_idx_ptr, sizeof(uint32_t)));
+    cudaMemset(d_dyn_idx_ptr, 0, sizeof(uint32_t));
     gpuAssert(cudaMalloc((void**)&d_states, STATES_BYTES));
     gpuAssert(cudaMalloc((void**)&d_in, ARRAY_BYTES));
     gpuAssert(cudaMalloc((void**)&d_out, ARRAY_BYTES));
@@ -156,14 +158,13 @@ void testScan(uint32_t size) {
     gpuAssert(cudaMemcpy(h_out.data(), d_out, ARRAY_BYTES, cudaMemcpyDeviceToHost));
 
     int acc = 0;
+
     bool test_passes = true;
 
     for (uint32_t i = 0; i < size; ++i) {
         acc += h_in[i];
         test_passes &= h_out[i] == acc;
-        std::cout << h_out[i] << ", ";
     }
-    std::cout << std::endl;
 
     if (test_passes) {
         std::cout << "Scan Test Passed using size=" << size << std::endl;
@@ -179,24 +180,22 @@ void testScan(uint32_t size) {
 
 int main() {
     info();
-    /*
+
     testBlocks(1 << 6);
     testBlocks(1 << 16);
     testBlocks(1 << 26);
 
     testBlocks(1000);
-    testBlocks(10000);
     testBlocks(100000);
-    */
+    testBlocks(10000000);
 
     testScan(1 << 8);
-    /*
     testScan(1 << 16);
     testScan(1 << 26);
 
     testScan(1000);
-    testScan(10000);
     testScan(100000);
-    */
+    testScan(10000000);
+
     return 0;
 }

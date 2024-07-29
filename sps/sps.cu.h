@@ -38,7 +38,7 @@ shmemToGlbCpy(const I glb_offs,
 
 template<typename T, typename I, typename OP, I ITEMS_PER_THREAD>
 __device__ inline T
-scanThread(T* shmem,
+scanThread(volatile T* shmem,
            volatile T* shmem_aux,
            OP op,
            const T ne) {
@@ -98,7 +98,7 @@ scanBlock(volatile T* shmem,
 
 template<typename T, typename I, typename OP, I ITEMS_PER_THREAD>
 __device__ inline void
-addAuxBlockScan(T* shmem,
+addAuxBlockScan(volatile T* shmem,
                 volatile T* shmem_aux,
                 OP op) {
     if (threadIdx.x > 0) {
@@ -115,7 +115,7 @@ addAuxBlockScan(T* shmem,
 
 template<typename T, typename I, typename OP, I ITEMS_PER_THREAD>
 __device__ inline void
-scanBlock(T* shmem,
+scanBlock(volatile T* shmem,
           volatile T* shmem_aux,
           OP op,
           const T ne) {
@@ -127,11 +127,11 @@ scanBlock(T* shmem,
 }
 
 template<typename I>
-__device__ inline I dynamicIndex(I* dyn_idx_ptr) {
-    __shared__ I dyn_idx;
+__device__ inline I dynamicIndex(volatile I* dyn_idx_ptr) {
+    volatile __shared__ I dyn_idx;
     
     if (threadIdx.x == 0)
-        dyn_idx = atomicAdd(dyn_idx_ptr, 1);
+        dyn_idx = atomicAdd(const_cast<I*>(dyn_idx_ptr), 1);
     
     __syncthreads();
 	return dyn_idx;
@@ -150,63 +150,37 @@ struct State {
     Status status = Invalid;
 };
 
-template<typename T>
-struct Pair {
-    T value;
-    uint8_t status_and_flag;
+/*
+Combine is associative since it is the binary operation which resuls in the left most element with
+Aggregate as an added identity element. The operation has the following table.
 
-    __host__ __device__ Pair(State<T> state, T ne) {
-        bool is_aggregate = state.status == Aggregate;
-        bool is_prefix = state.status == Prefix;
-        status_and_flag = !is_aggregate | (state.status << 1);
+P = Prefix
+A = Aggregate
+X = Invalid
+  | P | A | X
+-------------
+P | P | P | X
+-------------
+A | P | A | X
+-------------
+X | P | X | X
 
-        value = ne;
-        if (is_aggregate) {
-            value = state.aggregate;
-        } else if (is_prefix) {
-            value = state.prefix;
-        }
-    }
+If we map X to False and both P and X to True then we get that this corresponds to the or operation.
 
-    __host__ __device__ Pair(T value, Status status, bool flag) : value(value) {
-        status_and_flag = flag | (status << 1);
-    }
+P = True
+A = False
+X = True
+  | P | A | X
+-------------
+P | T | T | T
+-------------
+A | T | F | T
+-------------
+X | T | T | T
 
-    __host__ __device__ Pair(T value, uint8_t status_and_flag) : value(value), status_and_flag(status_and_flag) { }
-
-    __host__ __device__ Pair(T ne) : value(ne) {
-        status_and_flag = false | (Aggregate << 1);
-    }
-
-    __host__ __device__ Pair(const Pair<T>& other) : value(other.value), status_and_flag(other.status_and_flag) { }
-
-    __host__ __device__ Pair(const volatile Pair<T>& other) : value(other.value), status_and_flag(other.status_and_flag) { }
-
-    __host__ __device__ bool inline GetFlag() const volatile {
-        return status_and_flag & 1;
-    }
-
-    __host__ __device__ Status inline GetStatus() const volatile {
-        return static_cast<Status>(status_and_flag >> 1);
-    }
-
-    __host__ __device__ inline Pair<T>& operator=(const Pair<T>& other) {
-        if (this != &other) {
-            value = other.value;
-            status_and_flag = other.status_and_flag;
-        }
-        return *this;
-    }
-
-    __host__ __device__ inline volatile Pair<T>& operator=(const Pair<T>& other) volatile {
-        if (this != &other) {
-            value = other.value;
-            status_and_flag = other.status_and_flag;
-        }
-        return *this;
-    }
-};
-
+Meaning this can be used for an irregular segmented scan where we can propegate the last status to
+the end of a segment while combining Aggregates with P and X.
+*/
 __device__ inline Status
 combine(Status a, Status b) {
     if (b == Aggregate)
@@ -214,47 +188,44 @@ combine(Status a, Status b) {
     return b;
 }
 
-
 template<typename T, typename I, typename OP>
-__device__ inline Pair<T>
-scanWarp(volatile Pair<T>* shmem,
+__device__ inline void
+scanWarp(volatile T* values,
+         volatile Status* statuses,
          OP op,
          const uint8_t lane) {
     uint8_t h;
+    const I tid = threadIdx.x;
 
     #pragma unroll
     for (uint8_t d = 0; d < LG_WARP; d++) {
         if ((h = 1 << d) <= lane) {
-            Pair<T> a = shmem[threadIdx.x - h];
-            Pair<T> b = shmem[threadIdx.x];
-            bool new_flag = a.GetFlag() || b.GetFlag();
-            Status new_status = combine(a.GetStatus(), b.GetStatus());
-            shmem[threadIdx.x] = Pair<T>(b.GetFlag() ? b.value : op(a.value, b.value), new_status, new_flag);
+            bool is_not_aggregate = statuses[tid] != Aggregate;
+            values[tid] = is_not_aggregate ? values[tid] : op(values[tid - h], values[tid]);
+            statuses[tid] = combine(statuses[tid - h], statuses[tid]);
         }
     }
-    return shmem[threadIdx.x];
 }
 
 template<typename T, typename I, typename OP, I ITEMS_PER_THREAD>
 __device__ inline void
-decoupledLookbackScan(State<T>* states,
-                      T* shmem,
+decoupledLookbackScan(volatile State<T>* states,
+                      volatile T* shmem,
                       OP op,
                       const T ne,
                       I dyn_idx) {
-    volatile __shared__ uint8_t _shmem_states[WARP * sizeof(Pair<T>)];
-    volatile Pair<T>* shmem_states = reinterpret_cast<volatile Pair<T>*>(&_shmem_states[0]);
+    volatile __shared__ T values[WARP];
+    volatile __shared__ Status statuses[WARP];
     volatile __shared__ T shmem_prefix;
     const uint8_t lane = threadIdx.x & (WARP - 1);
     const bool is_first = threadIdx.x == 0;
 
     T aggregate = shmem[ITEMS_PER_THREAD * blockDim.x - 1];
+
     states[dyn_idx].aggregate = aggregate;
     
     if (dyn_idx == 0 && is_first) {
         states[dyn_idx].prefix = aggregate;
-    } else if (is_first) {
-        states[dyn_idx].prefix = ne;
     }
     
     __threadfence();
@@ -264,30 +235,39 @@ decoupledLookbackScan(State<T>* states,
         states[dyn_idx].status = Aggregate;
     }
 
-    __syncthreads();
-
     T prefix = ne;
+    T status = Aggregate;
     if (threadIdx.x < WARP && dyn_idx != 0) {
-        I lookback_idx = dyn_idx - threadIdx.x - 1;
-        I lookback_warp = 0;
+        I lookback_idx = threadIdx.x + dyn_idx;
+        I lookback_warp = WARP;
 
+        T result = ne;
+        Status status = Aggregate;
         do {
-            if (threadIdx.x < dyn_idx && lookback_warp <= lookback_idx) {
-                shmem_states[threadIdx.x] = Pair<T>(states[lookback_idx - lookback_warp], ne);
+            if (lookback_warp <= lookback_idx) {
+                I idx = lookback_idx - lookback_warp;
+                Status status = states[idx].status;
+                statuses[threadIdx.x] = status;
+                values[threadIdx.x] = status == Prefix ? states[idx].prefix : states[idx].aggregate;
             } else {
-                shmem_states[threadIdx.x] = Pair<T>(ne);
+                statuses[threadIdx.x] = Aggregate;
+                values[threadIdx.x] = ne;
             }
 
-            T result = scanWarp<T, I, OP>(shmem_states, op, lane).value;
+            scanWarp<T, I, OP>(values, statuses, op, lane);
 
-            if (shmem_states[WARP - 1].GetStatus() == Invalid)
+            result = values[WARP - 1];
+            status = statuses[WARP - 1];
+
+            if (status == Invalid)
                 continue;
                 
-            if (is_first)
+            if (is_first) {
                 prefix = op(result, prefix);
-            
-            lookback_warp -= WARP;
-        } while (shmem_states[WARP - 1].GetStatus() != Prefix);
+            }
+
+            lookback_warp += WARP;
+        } while (status != Prefix);
     }
 
     if (is_first) {
