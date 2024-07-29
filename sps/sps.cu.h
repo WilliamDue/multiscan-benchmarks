@@ -235,40 +235,38 @@ decoupledLookbackScan(volatile State<T>* states,
         states[dyn_idx].status = Aggregate;
     }
 
+    if (threadIdx.x >= WARP || dyn_idx == 0)
+        return;
+
     T prefix = ne;
-    T status = Aggregate;
-    if (threadIdx.x < WARP && dyn_idx != 0) {
-        I lookback_idx = threadIdx.x + dyn_idx;
-        I lookback_warp = WARP;
+    I lookback_idx = threadIdx.x + dyn_idx;
+    I lookback_warp = WARP;
+    Status status = Aggregate;
+    do {
+        if (lookback_warp <= lookback_idx) {
+            I idx = lookback_idx - lookback_warp;
+            status = states[idx].status;
+            statuses[threadIdx.x] = status;
+            values[threadIdx.x] = status == Prefix ? states[idx].prefix : states[idx].aggregate;
+        } else {
+            statuses[threadIdx.x] = Aggregate;
+            values[threadIdx.x] = ne;
+        }
 
-        T result = ne;
-        Status status = Aggregate;
-        do {
-            if (lookback_warp <= lookback_idx) {
-                I idx = lookback_idx - lookback_warp;
-                Status status = states[idx].status;
-                statuses[threadIdx.x] = status;
-                values[threadIdx.x] = status == Prefix ? states[idx].prefix : states[idx].aggregate;
-            } else {
-                statuses[threadIdx.x] = Aggregate;
-                values[threadIdx.x] = ne;
-            }
+        scanWarp<T, I, OP>(values, statuses, op, lane);
 
-            scanWarp<T, I, OP>(values, statuses, op, lane);
+        T result = values[WARP - 1];
+        status = statuses[WARP - 1];
 
-            result = values[WARP - 1];
-            status = statuses[WARP - 1];
+        if (status == Invalid)
+            continue;
+            
+        if (is_first) {
+            prefix = op(result, prefix);
+        }
 
-            if (status == Invalid)
-                continue;
-                
-            if (is_first) {
-                prefix = op(result, prefix);
-            }
-
-            lookback_warp += WARP;
-        } while (status != Prefix);
-    }
+        lookback_warp += WARP;
+    } while (status != Prefix);
 
     if (is_first) {
         shmem_prefix = prefix;
