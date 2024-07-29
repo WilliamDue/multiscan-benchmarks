@@ -290,3 +290,15 @@ decoupledLookbackScan(volatile State<T>* states,
 	__syncthreads();
 }
 
+template<typename T, typename I, typename OP, I ITEMS_PER_THREAD>
+__device__ inline void
+scan(volatile T* block,
+     volatile T* block_aux,
+     volatile State<T>* states,
+     OP op,
+     const T ne,
+     I dyn_idx) {
+    scanBlock<T, I, OP, ITEMS_PER_THREAD>(block, block_aux, op, ne);
+
+    decoupledLookbackScan<T, I, OP, ITEMS_PER_THREAD>(states, block, op, ne, dyn_idx);
+}

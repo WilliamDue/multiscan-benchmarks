@@ -23,6 +23,7 @@
     # stdenv.cc
     gcc12
     binutils
+    futhark
   ];
   multiPkgs = pkgs: with pkgs; [ zlib ];
   runScript = "bash";
