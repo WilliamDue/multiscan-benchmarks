@@ -138,15 +138,15 @@ void testBlocks(uint32_t size) {
 
 template<typename T, typename I, typename OP, I BLOCK_SIZE, I ITEMS_PER_THREAD>
 __global__ void
-scan(T* d_in,
-     T* d_out,
-     volatile State<T>* states,
-     I size,
-     OP op,
-     const T ne,
-     volatile I* dyn_idx_ptr) {
+spsScan(T* d_in,
+        T* d_out,
+        volatile State<T>* states,
+        I size,
+        OP op,
+        const T ne,
+        volatile I* dyn_idx_ptr) {
     volatile __shared__ T block[ITEMS_PER_THREAD * BLOCK_SIZE];
-	volatile __shared__ T block_aux[BLOCK_SIZE];
+    volatile __shared__ T block_aux[BLOCK_SIZE];
     
     I dyn_idx = dynamicIndex<I>(dyn_idx_ptr);
     I glb_offs = dyn_idx * BLOCK_SIZE * ITEMS_PER_THREAD;
@@ -222,6 +222,7 @@ void testScan(uint32_t size) {
 
     Add op = Add();
     
+    /*
     for (uint32_t i = 0; i < WARMUP_RUNS; ++i) {
         scan<int, uint32_t, Add, BLOCK_SIZE, ITEMS_PER_THREAD><<<NUM_LOGICAL_BLOCKS, BLOCK_SIZE>>>(d_in, d_out, d_states, size, op, 0, d_dyn_idx_ptr);
         cudaDeviceSynchronize();
@@ -245,8 +246,8 @@ void testScan(uint32_t size) {
 
     compute_descriptors(temp, RUNS, ARRAY_BYTES);
     free(temp);
-
-    scan<int, uint32_t, Add, BLOCK_SIZE, ITEMS_PER_THREAD><<<NUM_LOGICAL_BLOCKS, BLOCK_SIZE>>>(d_in, d_out, d_states, size, op, 0, d_dyn_idx_ptr);
+    */
+    spsScan<int, uint32_t, Add, BLOCK_SIZE, ITEMS_PER_THREAD><<<NUM_LOGICAL_BLOCKS, BLOCK_SIZE>>>(d_in, d_out, d_states, size, op, 0, d_dyn_idx_ptr);
     cudaDeviceSynchronize();
 
     gpuAssert(cudaMemcpy(h_out.data(), d_out, ARRAY_BYTES, cudaMemcpyDeviceToHost));
@@ -274,7 +275,7 @@ void testScan(uint32_t size) {
 
 int main() {
     info();
-
+    /*
     testBlocks(1 << 6);
     testBlocks(1 << 16);
     testBlocks(1 << 26);
@@ -286,7 +287,7 @@ int main() {
 
     benchMemcpy(100000000);
     std::cout << "\n";
-
+    */
     testScan(1 << 8);
     std::cout << "\n";
     testScan(1 << 16);
@@ -301,5 +302,6 @@ int main() {
     testScan(100000000);
     std::cout << std::flush;
 
+    gpuAssert(cudaPeekAtLastError());
     return 0;
 }

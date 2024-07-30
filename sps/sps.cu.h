@@ -287,7 +287,7 @@ decoupledLookbackScan(volatile State<T>* states,
     for (I lid = offset; lid < upper; lid++) {
         shmem[lid] = op(prefix, shmem[lid]);
     }
-	__syncthreads();
+    __syncthreads();
 }
 
 template<typename T, typename I, typename OP, I ITEMS_PER_THREAD>
