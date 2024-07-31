@@ -15,7 +15,7 @@ void puti32(int32_t n) {
   union i32 result;
   result.i = n;
 
-  for (int8_t i = sizeof(uint32_t) - 1; i >= 0; i--) {
+  for (uint8_t i = 0; i < sizeof(uint32_t); i++) {
     putchar(result.str[i]);
   }
 }
@@ -24,7 +24,13 @@ void putu64(uint64_t n) {
   union u64 result;
   result.i = n;
 
-  for (int8_t i = sizeof(uint64_t) - 1; i >= 0; i--) {
+  for (uint8_t i = 0; i < sizeof(uint64_t); i++) {
     putchar(result.str[i]);
   }
 }
+
+/*
+void read_int32(uint8_t * input, int32_t * output) {
+
+}
+*/

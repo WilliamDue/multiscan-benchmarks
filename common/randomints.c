@@ -23,7 +23,7 @@ int main(int argc, char *argv[]) {
   sscanf(argv[2], "%d", &chance);
   assert(0 < chance);
   assert(chance <= 100);
-  char header[7] = {'b', '2', '1', ' ', 'i', '3', '2'};
+  uint8_t header[7] = {'b', 2U, 1U, ' ', 'i', '3', '2'};
   for (size_t i = 0; i < 7; i++) {
     putchar(header[i]);
   }
