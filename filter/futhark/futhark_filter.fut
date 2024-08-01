@@ -20,6 +20,13 @@ entry main [n] (as: [n]i32): *[]i32 =
   filter' (0i32<) as
 
 -- ==
+-- entry: intscan
+-- input @ ../../data/randomints_sparse_500MiB.in
+-- input @ ../../data/randomints_dense_500MiB.in
+entry intscan [n] (as: [n]i32): *[]i32 =
+  scan (+) 0 as
+
+-- ==
 -- entry: expected
 -- input @ ../../data/randomints_sparse_500MiB.in
 -- output @ ../randomints_sparse_500MiB.out

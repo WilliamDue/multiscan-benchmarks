@@ -239,6 +239,8 @@ int main() {
     testScan(100000);
     std::cout << "\n";
     testScan(100000000);
+    std::cout << "\n" << "500MiB:\n";
+    testScan(131072000);
     std::cout << std::flush;
 
     gpuAssert(cudaPeekAtLastError());
