@@ -36,24 +36,6 @@ shmemToGlbCpy(const I glb_offs,
     __syncthreads();
 }
 
-template<typename T, typename I, typename Func, I ITEMS_PER_THREAD>
-__device__ inline void
-shmemToGlbCpy(const I glb_offs,
-              const I size,
-              T* d_write,
-              volatile T* shmem_read,
-              Func f,
-              volatile I* glb_indices) {
-    #pragma unroll
-    for (I i = 0; i < ITEMS_PER_THREAD; i++) {
-        I lid = blockDim.x * i + threadIdx.x;
-        I gid = glb_offs + lid;
-        if (gid < size)
-            d_write[glb_indices[gid]] = f(shmem_read[lid]);
-    }
-    __syncthreads();
-}
-
 template<typename T, typename I, typename OP, I ITEMS_PER_THREAD>
 __device__ inline T
 scanThread(volatile T* shmem,

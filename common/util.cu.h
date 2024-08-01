@@ -37,6 +37,7 @@ void compute_descriptors(timeval* measurements, size_t size, size_t bytes) {
 int gpuAssert(cudaError_t code) {
     if(code != cudaSuccess) {
         printf("GPU Error: %s\n", cudaGetErrorString(code));
+        assert(0);
         return -1;
     }
     return 0;

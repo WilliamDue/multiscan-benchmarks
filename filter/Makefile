@@ -5,29 +5,31 @@ FUTHARK_PROGRAM=futhark_filter
 CUDA_PATH=./cuda
 CUDA_PROGRAM=cuda_filter
 COMPILER?=nvcc
-FLAGS?=-O3 --std=c++14
+FLAGS?=-O3 --std=c++14 -diag-suppress 550
 
 default: bench
 
 .PHONY: clean bench
 
-randomints_sparse_100MiB.in: 
+$(DATA_PATH)/randomints_sparse_500MiB.in: 
 	(cd $(DATA_PATH) && make)
 
-randomints_dense_100MiB.in:
+$(DATA_PATH)/randomints_dense_500MiB.in:
 	(cd $(DATA_PATH) && make)
 
 $(FUTHARK_PROGRAM): $(FUTHARK_PATH)/$(FUTHARK_PROGRAM).fut
 	futhark cuda $< -o $(FUTHARK_PROGRAM)
 
-randomints_sparse_100MiB.out: $(DATA_PATH)/randomints_sparse_100MiB.in $(FUTHARK_PROGRAM)
+randomints_sparse_500MiB.out: $(DATA_PATH)/randomints_sparse_500MiB.in $(FUTHARK_PROGRAM)
 	cat $< | ./$(FUTHARK_PROGRAM) -e expected -b > $@
 
-randomints_dense_100MiB.out: $(DATA_PATH)/randomints_dense_100MiB.in $(FUTHARK_PROGRAM)
+randomints_dense_500MiB.out: $(DATA_PATH)/randomints_dense_500MiB.in $(FUTHARK_PROGRAM)
 	cat $< | ./$(FUTHARK_PROGRAM) -e expected -b > $@
 
-bench: $(FUTHARK_PROGRAM) randomints_dense_100MiB.out randomints_sparse_100MiB.out
+bench: randomints_dense_500MiB.out randomints_sparse_500MiB.out $(CUDA_PROGRAM) $(FUTHARK_PROGRAM)
 	futhark bench $(FUTHARK_PATH)/$(FUTHARK_PROGRAM).fut
+	./cuda_filter ../data/randomints_dense_500MiB.in ./randomints_dense_500MiB.out
+	./cuda_filter ../data/randomints_sparse_500MiB.in ./randomints_sparse_500MiB.out
 
 $(CUDA_PROGRAM): $(CUDA_PATH)/$(CUDA_PROGRAM).cu $(COMMON_PATH)/sps.cu.h $(COMMON_PATH)/util.cu.h $(COMMON_PATH)/data.h
 	$(COMPILER) $(FLAGS) -o $@ $<
