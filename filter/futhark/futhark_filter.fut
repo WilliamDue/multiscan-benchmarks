@@ -12,6 +12,18 @@ def filter' [n] 'a (p: a -> bool) (as: [n]a): *[]a =
   in result[:m]
 
 -- ==
--- input @ 
+-- input @ ../../data/randomints_sparse_100MiB.in
+-- output @ ../randomints_sparse_100MiB.out
+-- input @ ../../data/randomints_dense_100MiB.in
+-- output @ ../randomints_dense_100MiB.out
 entry main [n] (as: [n]i32): *[]i32 =
-  filter (0i32<)
+  filter' (0i32<) as
+
+-- ==
+-- entry: expected
+-- input @ ../../data/randomints_sparse_100MiB.in
+-- output @ ../randomints_sparse_100MiB.out
+-- input @ ../../data/randomints_dense_100MiB.in
+-- output @ ../randomints_dense_100MiB.out
+entry expected [n] (as: [n]i32): *[]i32 =
+  filter (0i32<) as
