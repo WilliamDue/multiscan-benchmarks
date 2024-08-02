@@ -1,0 +1,7 @@
+*
+!Makefile
+!futhark/
+!cuda/
+!futhark/**
+!cuda/**
+!.gitignore
