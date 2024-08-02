@@ -24,7 +24,7 @@ void compute_descriptors(timeval* measurements, size_t size, size_t bytes) {
         diff = t_diff.tv_sec * 1e6 + t_diff.tv_usec;
         sample_mean += diff / d_size;
         sample_variance += (diff * diff) / d_size;
-        sample_gbps += bytes / (500 * d_size * diff);
+        sample_gbps += bytes / (1000 * d_size * diff);
     }
     double sample_std = sqrt(sample_variance);
     double bound = (0.95 * sample_std) / sqrt(d_size - 1);

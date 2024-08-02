@@ -201,7 +201,7 @@ scanWarp(volatile T* values,
     for (uint8_t d = 0; d < LG_WARP; d++) {
         if ((h = 1 << d) <= lane) {
             bool is_not_aggregate = statuses[tid] != Aggregate;
-            values[tid] = is_not_aggregate ? values[tid] : op(values[tid - h], values[tid]);
+            values[tid] = is_not_aggregate ? const_cast<T*>(values)[tid] : op(values[tid - h], values[tid]);
             statuses[tid] = combine(statuses[tid - h], statuses[tid]);
         }
     }

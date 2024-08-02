@@ -127,7 +127,7 @@ void benchMemcpy(uint32_t size) {
         temp[i] = t_diff;
     }
 
-    compute_descriptors(temp, RUNS, ARRAY_BYTES);
+    compute_descriptors(temp, RUNS, 2 * ARRAY_BYTES);
     free(temp);
     gpuAssert(cudaFree(d_in));
     gpuAssert(cudaFree(d_out));
@@ -183,7 +183,7 @@ void testScan(uint32_t size) {
         cudaMemset(d_dyn_idx_ptr, 0, sizeof(uint32_t));
     }
 
-    compute_descriptors(temp, RUNS, ARRAY_BYTES);
+    compute_descriptors(temp, RUNS, 2 * ARRAY_BYTES);
     free(temp);
 
     spsScan<int, uint32_t, Add, BLOCK_SIZE, ITEMS_PER_THREAD><<<NUM_LOGICAL_BLOCKS, BLOCK_SIZE>>>(d_in, d_out, d_states, size, op, 0, d_dyn_idx_ptr);

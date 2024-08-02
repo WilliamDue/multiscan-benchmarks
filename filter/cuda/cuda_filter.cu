@@ -128,16 +128,18 @@ void testFilter(int32_t* input, size_t input_size, int32_t* expected, size_t exp
         timeval_subtract(&t_diff, &curr, &prev);
         temp[i] = t_diff;
         cudaMemset(d_dyn_idx_ptr, 0, sizeof(uint32_t));
+        cudaMemset(d_new_size, 0, sizeof(uint32_t));
         gpuAssert(cudaPeekAtLastError());
     }
 
-    compute_descriptors(temp, RUNS, ARRAY_BYTES);
+    uint32_t temp_size = 0;
+    gpuAssert(cudaMemcpy(&temp_size, d_new_size, sizeof(uint32_t), cudaMemcpyDeviceToHost));
+    compute_descriptors(temp, RUNS, ARRAY_BYTES + temp_size * sizeof(int32_t));
     free(temp);
 
     filter<int32_t, uint32_t, Predicate, BLOCK_SIZE, ITEMS_PER_THREAD><<<NUM_LOGICAL_BLOCKS, BLOCK_SIZE>>>(d_in, d_out, d_states, size, NUM_LOGICAL_BLOCKS, pred, d_dyn_idx_ptr, d_new_size);
     cudaDeviceSynchronize();
     gpuAssert(cudaMemcpy(h_out.data(), d_out, ARRAY_BYTES, cudaMemcpyDeviceToHost));
-    uint32_t temp_size = 0;
     gpuAssert(cudaMemcpy(&temp_size, d_new_size, sizeof(uint32_t), cudaMemcpyDeviceToHost));
     
     bool test_passes = temp_size == expected_size;

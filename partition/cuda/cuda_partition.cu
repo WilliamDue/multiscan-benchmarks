@@ -22,7 +22,7 @@ struct Tuple {
 
     __host__ __device__
     Tuple(const volatile Tuple<T>& other) : first(other.first), second(other.second) {}
-
+    
     __host__ __device__
     Tuple<T>& operator=(const Tuple<T>& other) {
         if (this != &other) {

@@ -16,6 +16,12 @@ def filter' [n] 'a (p: a -> bool) (as: [n]a): *[]a =
 -- output @ ../randomints_sparse_500MiB.out
 -- input @ ../../data/randomints_dense_500MiB.in
 -- output @ ../randomints_dense_500MiB.out
+-- input @ ../../data/randomints_moderate_500MiB.in
+-- output @ ../randomints_moderate_500MiB.out
+-- input @ ../../data/randomints_empty_500MiB.in
+-- output @ ../randomints_empty_500MiB.out
+-- input @ ../../data/randomints_full_500MiB.in
+-- output @ ../randomints_full_500MiB.out
 entry main [n] (as: [n]i32): *[]i32 =
   filter' (0i32<) as
 
@@ -23,6 +29,9 @@ entry main [n] (as: [n]i32): *[]i32 =
 -- entry: intscan
 -- input @ ../../data/randomints_sparse_500MiB.in
 -- input @ ../../data/randomints_dense_500MiB.in
+-- input @ ../../data/randomints_moderate_500MiB.in
+-- input @ ../../data/randomints_empty_500MiB.in
+-- input @ ../../data/randomints_full_500MiB.in
 entry intscan [n] (as: [n]i32): *[]i32 =
   scan (+) 0 as
 
@@ -32,5 +41,11 @@ entry intscan [n] (as: [n]i32): *[]i32 =
 -- output @ ../randomints_sparse_500MiB.out
 -- input @ ../../data/randomints_dense_500MiB.in
 -- output @ ../randomints_dense_500MiB.out
+-- input @ ../../data/randomints_moderate_500MiB.in
+-- output @ ../randomints_moderate_500MiB.out
+-- input @ ../../data/randomints_empty_500MiB.in
+-- output @ ../randomints_empty_500MiB.out
+-- input @ ../../data/randomints_full_500MiB.in
+-- output @ ../randomints_full_500MiB.out
 entry expected [n] (as: [n]i32): *[]i32 =
   filter (0i32<) as
