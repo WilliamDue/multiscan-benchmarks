@@ -59,7 +59,7 @@ struct AddTuple {
 };
 
 struct Predicate {
-    __device__ inline uint32_t operator()(int32_t a) const {
+    __device__ inline bool operator()(int32_t a) const {
         return 0 < a;
     }
 };
@@ -79,14 +79,14 @@ partition(T* d_in,
           I size,
           I num_logical_blocks,
           PRED pred,
-          volatile I* dyn_idx_ptr,
+          volatile uint32_t* dyn_idx_ptr,
           volatile I* offset) {
     volatile __shared__ Tuple<I> block[ITEMS_PER_THREAD * BLOCK_SIZE];
     volatile __shared__ Tuple<I> block_aux[BLOCK_SIZE];
     T elems[ITEMS_PER_THREAD];
     bool bools[ITEMS_PER_THREAD];
 
-    I dyn_idx = dynamicIndex<I>(dyn_idx_ptr);
+    uint32_t dyn_idx = dynamicIndex<uint32_t>(dyn_idx_ptr);
     I glb_offs = dyn_idx * BLOCK_SIZE * ITEMS_PER_THREAD;
 
     #pragma unroll
@@ -123,29 +123,31 @@ partition(T* d_in,
 }
 
 void testPartition(int32_t* input, size_t input_size, int32_t* expected, size_t expected_size) {
-    const uint32_t size = input_size;
-    const uint32_t BLOCK_SIZE = 256;
-    const uint32_t ITEMS_PER_THREAD = 15;
-    const uint32_t NUM_LOGICAL_BLOCKS = (size + BLOCK_SIZE * ITEMS_PER_THREAD - 1) / (BLOCK_SIZE * ITEMS_PER_THREAD);
-    const uint32_t ARRAY_BYTES = size * sizeof(int32_t);
-    const uint32_t STATES_BYTES = NUM_LOGICAL_BLOCKS * sizeof(State<Tuple<uint32_t>>);
-    const uint32_t WARMUP_RUNS = 1000;
-    const uint32_t RUNS = 10;
+    using I = uint32_t;
+    const I size = input_size;
+    const I BLOCK_SIZE = 256;
+    const I ITEMS_PER_THREAD = 15;
+    const I NUM_LOGICAL_BLOCKS = (size + BLOCK_SIZE * ITEMS_PER_THREAD - 1) / (BLOCK_SIZE * ITEMS_PER_THREAD);
+    const I ARRAY_BYTES = size * sizeof(int32_t);
+    const I STATES_BYTES = NUM_LOGICAL_BLOCKS * sizeof(State<Tuple<I>>);
+    const I WARMUP_RUNS = 1000;
+    const I RUNS = 10;
 
     std::vector<int32_t> h_in(size);
     std::vector<int32_t> h_out(size, 0);
 
-    for (uint32_t i = 0; i < size; ++i) {
+    for (I i = 0; i < size; ++i) {
         h_in[i] = input[i];
     }
-    
-    uint32_t *d_dyn_idx_ptr, *d_offset;
+
+    uint32_t* d_dyn_idx_ptr;
+    I *d_offset;
     int32_t *d_in, *d_out;
-    State<Tuple<uint32_t>> *d_states;
+    State<Tuple<I>> *d_states;
     gpuAssert(cudaMalloc((void**)&d_dyn_idx_ptr, sizeof(uint32_t)));
     cudaMemset(d_dyn_idx_ptr, 0, sizeof(uint32_t));
-    gpuAssert(cudaMalloc((void**)&d_offset, sizeof(uint32_t)));
-    cudaMemset(d_offset, 0, sizeof(uint32_t));
+    gpuAssert(cudaMalloc((void**)&d_offset, sizeof(I)));
+    cudaMemset(d_offset, 0, sizeof(I));
     gpuAssert(cudaMalloc((void**)&d_states, STATES_BYTES));
     gpuAssert(cudaMalloc((void**)&d_in, ARRAY_BYTES));
     gpuAssert(cudaMalloc((void**)&d_out, ARRAY_BYTES));
@@ -155,14 +157,14 @@ void testPartition(int32_t* input, size_t input_size, int32_t* expected, size_t 
     size_t temp_storage_bytes = 0;
 
     Predicate pred;
-    cub::TransformInputIterator<uint32_t, Predicate, int*> itr(d_in, pred);
+    cub::TransformInputIterator<I, Predicate, int*> itr(d_in, pred);
     cub::DeviceReduce::Sum(d_temp_storage, temp_storage_bytes, itr, d_offset, size);
 
     cudaMalloc(&d_temp_storage, temp_storage_bytes);
     
-    for (uint32_t i = 0; i < WARMUP_RUNS; ++i) {
+    for (I i = 0; i < WARMUP_RUNS; ++i) {
         cub::DeviceReduce::Sum(d_temp_storage, temp_storage_bytes, itr, d_offset, size);
-        partition<int32_t, uint32_t, Predicate, BLOCK_SIZE, ITEMS_PER_THREAD><<<NUM_LOGICAL_BLOCKS, BLOCK_SIZE>>>(d_in, d_out, d_states, size, NUM_LOGICAL_BLOCKS, pred, d_dyn_idx_ptr, d_offset);
+        partition<int32_t, I, Predicate, BLOCK_SIZE, ITEMS_PER_THREAD><<<NUM_LOGICAL_BLOCKS, BLOCK_SIZE>>>(d_in, d_out, d_states, size, NUM_LOGICAL_BLOCKS, pred, d_dyn_idx_ptr, d_offset);
         cudaDeviceSynchronize();
         cudaMemset(d_dyn_idx_ptr, 0, sizeof(uint32_t));
         gpuAssert(cudaPeekAtLastError());
@@ -173,10 +175,10 @@ void testPartition(int32_t* input, size_t input_size, int32_t* expected, size_t 
     timeval curr;
     timeval t_diff;
 
-    for (uint32_t i = 0; i < RUNS; ++i) {
+    for (I i = 0; i < RUNS; ++i) {
         gettimeofday(&prev, NULL);
         cub::DeviceReduce::Sum(d_temp_storage, temp_storage_bytes, itr, d_offset, size);
-        partition<int32_t, uint32_t, Predicate, BLOCK_SIZE, ITEMS_PER_THREAD><<<NUM_LOGICAL_BLOCKS, BLOCK_SIZE>>>(d_in, d_out, d_states, size, NUM_LOGICAL_BLOCKS, pred, d_dyn_idx_ptr, d_offset);
+        partition<int32_t, I, Predicate, BLOCK_SIZE, ITEMS_PER_THREAD><<<NUM_LOGICAL_BLOCKS, BLOCK_SIZE>>>(d_in, d_out, d_states, size, NUM_LOGICAL_BLOCKS, pred, d_dyn_idx_ptr, d_offset);
         cudaDeviceSynchronize();
         gettimeofday(&curr, NULL);
         timeval_subtract(&t_diff, &curr, &prev);
@@ -191,12 +193,12 @@ void testPartition(int32_t* input, size_t input_size, int32_t* expected, size_t 
     free(temp);
 
     cub::DeviceReduce::Sum(d_temp_storage, temp_storage_bytes, itr, d_offset, size);
-    partition<int32_t, uint32_t, Predicate, BLOCK_SIZE, ITEMS_PER_THREAD><<<NUM_LOGICAL_BLOCKS, BLOCK_SIZE>>>(d_in, d_out, d_states, size, NUM_LOGICAL_BLOCKS, pred, d_dyn_idx_ptr, d_offset);
+    partition<int32_t, I, Predicate, BLOCK_SIZE, ITEMS_PER_THREAD><<<NUM_LOGICAL_BLOCKS, BLOCK_SIZE>>>(d_in, d_out, d_states, size, NUM_LOGICAL_BLOCKS, pred, d_dyn_idx_ptr, d_offset);
     cudaDeviceSynchronize();
     gpuAssert(cudaMemcpy(h_out.data(), d_out, ARRAY_BYTES, cudaMemcpyDeviceToHost));
     
     bool test_passes = true;
-    for (uint32_t i = 0; i < size; ++i) {
+    for (I i = 0; i < size; ++i) {
         test_passes &= h_out[i] == expected[i];
 
         if (!test_passes) {

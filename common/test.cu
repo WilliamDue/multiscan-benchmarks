@@ -28,16 +28,17 @@ scanBlocks(T* d_in,
     shmemToGlbCpy<T, I, ITEMS_PER_THREAD>(glb_offs, size, d_out, block);
 }
 
-void testBlocks(uint32_t size) {
-    const uint32_t BLOCK_SIZE = 32;
-    const uint32_t ITEMS_PER_THREAD = 4;
-    const uint32_t GRID_SIZE = (size + BLOCK_SIZE * ITEMS_PER_THREAD - 1) / (BLOCK_SIZE * ITEMS_PER_THREAD);
-    const uint32_t ARRAY_BYTES = size * sizeof(int);
+template<typename I>
+void testBlocks(I size) {
+    const I BLOCK_SIZE = 32;
+    const I ITEMS_PER_THREAD = 4;
+    const I GRID_SIZE = (size + BLOCK_SIZE * ITEMS_PER_THREAD - 1) / (BLOCK_SIZE * ITEMS_PER_THREAD);
+    const I ARRAY_BYTES = size * sizeof(int);
 
     std::vector<int> h_in(size);
     std::vector<int> h_out(size, 0);
 
-    for (uint32_t i = 0; i < size; ++i) {
+    for (I i = 0; i < size; ++i) {
         h_in[i] = rand() % 10;
     }
 
@@ -49,7 +50,7 @@ void testBlocks(uint32_t size) {
 
     Add op = Add();
     
-    scanBlocks<int, uint32_t, Add, BLOCK_SIZE, ITEMS_PER_THREAD><<<GRID_SIZE, BLOCK_SIZE>>>(d_in, d_out, op, 0, size);
+    scanBlocks<int, I, Add, BLOCK_SIZE, ITEMS_PER_THREAD><<<GRID_SIZE, BLOCK_SIZE>>>(d_in, d_out, op, 0, size);
     cudaDeviceSynchronize();
 
     gpuAssert(cudaMemcpy(h_out.data(), d_out, ARRAY_BYTES, cudaMemcpyDeviceToHost));
@@ -57,7 +58,7 @@ void testBlocks(uint32_t size) {
     int acc = 0;
     bool test_passes = true;
 
-    for (uint32_t i = 0; i < size; ++i) {
+    for (I i = 0; i < size; ++i) {
         if (i % (BLOCK_SIZE * ITEMS_PER_THREAD) == 0) {
             acc = h_in[i];
         } else {
@@ -84,11 +85,11 @@ spsScan(T* d_in,
      I size,
      OP op,
      const T ne,
-     volatile I* dyn_idx_ptr) {
+     volatile uint32_t* dyn_idx_ptr) {
     volatile __shared__ T block[ITEMS_PER_THREAD * BLOCK_SIZE];
 	volatile __shared__ T block_aux[BLOCK_SIZE];
     
-    I dyn_idx = dynamicIndex<I>(dyn_idx_ptr);
+    uint32_t dyn_idx = dynamicIndex<uint32_t>(dyn_idx_ptr);
     I glb_offs = dyn_idx * BLOCK_SIZE * ITEMS_PER_THREAD;
 
     glbToShmemCpy<T, I, ITEMS_PER_THREAD>(glb_offs, size, ne, d_in, block);
@@ -99,16 +100,16 @@ spsScan(T* d_in,
     
 }
 
-void benchMemcpy(uint32_t size) {
-    const uint32_t WARMUP_RUNS = 50;
-    const uint32_t RUNS = 10;
-    const uint32_t ARRAY_BYTES = size * sizeof(int);
+void benchMemcpy(size_t size) {
+    const size_t WARMUP_RUNS = 50;
+    const size_t RUNS = 10;
+    const size_t ARRAY_BYTES = size * sizeof(int);
     int *d_in, *d_out;
 
     gpuAssert(cudaMalloc((void**)&d_in, ARRAY_BYTES));
     gpuAssert(cudaMalloc((void**)&d_out, ARRAY_BYTES));
 
-    for (uint32_t i = 0; i < WARMUP_RUNS; ++i) {
+    for (size_t i = 0; i < WARMUP_RUNS; ++i) {
         cudaMemcpy(d_out, d_in, size, cudaMemcpyDeviceToDevice);
         cudaDeviceSynchronize();
     }
@@ -118,7 +119,7 @@ void benchMemcpy(uint32_t size) {
     timeval curr;
     timeval t_diff;
 
-    for (uint32_t i = 0; i < RUNS; ++i) {
+    for (size_t i = 0; i < RUNS; ++i) {
         gettimeofday(&prev, NULL);
         cudaMemcpy(d_out, d_in, ARRAY_BYTES, cudaMemcpyDeviceToDevice);
         cudaDeviceSynchronize();
@@ -133,19 +134,20 @@ void benchMemcpy(uint32_t size) {
     gpuAssert(cudaFree(d_out));
 }
 
-void testScan(uint32_t size) {
-    const uint32_t BLOCK_SIZE = 256;
-    const uint32_t ITEMS_PER_THREAD = 30;
-    const uint32_t NUM_LOGICAL_BLOCKS = (size + BLOCK_SIZE * ITEMS_PER_THREAD - 1) / (BLOCK_SIZE * ITEMS_PER_THREAD);
-    const uint32_t ARRAY_BYTES = size * sizeof(int);
-    const uint32_t STATES_BYTES = NUM_LOGICAL_BLOCKS * sizeof(State<int>);
-    const uint32_t WARMUP_RUNS = 1000;
-    const uint32_t RUNS = 10;
+template<typename I>
+void testScan(I size) {
+    const I BLOCK_SIZE = 256;
+    const I ITEMS_PER_THREAD = 30;
+    const I NUM_LOGICAL_BLOCKS = (size + BLOCK_SIZE * ITEMS_PER_THREAD - 1) / (BLOCK_SIZE * ITEMS_PER_THREAD);
+    const I ARRAY_BYTES = size * sizeof(int);
+    const I STATES_BYTES = NUM_LOGICAL_BLOCKS * sizeof(State<int>);
+    const I WARMUP_RUNS = 1000;
+    const I RUNS = 10;
 
     std::vector<int> h_in(size);
     std::vector<int> h_out(size, 0);
 
-    for (uint32_t i = 0; i < size; ++i) {
+    for (I i = 0; i < size; ++i) {
         h_in[i] = rand() % 10;
     }
 
@@ -162,8 +164,8 @@ void testScan(uint32_t size) {
 
     Add op = Add();
     
-    for (uint32_t i = 0; i < WARMUP_RUNS; ++i) {
-        spsScan<int, uint32_t, Add, BLOCK_SIZE, ITEMS_PER_THREAD><<<NUM_LOGICAL_BLOCKS, BLOCK_SIZE>>>(d_in, d_out, d_states, size, op, 0, d_dyn_idx_ptr);
+    for (I i = 0; i < WARMUP_RUNS; ++i) {
+        spsScan<int, I, Add, BLOCK_SIZE, ITEMS_PER_THREAD><<<NUM_LOGICAL_BLOCKS, BLOCK_SIZE>>>(d_in, d_out, d_states, size, op, 0, d_dyn_idx_ptr);
         cudaDeviceSynchronize();
         cudaMemset(d_dyn_idx_ptr, 0, sizeof(uint32_t));
     }
@@ -173,9 +175,9 @@ void testScan(uint32_t size) {
     timeval curr;
     timeval t_diff;
 
-    for (uint32_t i = 0; i < RUNS; ++i) {
+    for (I i = 0; i < RUNS; ++i) {
         gettimeofday(&prev, NULL);
-        spsScan<int, uint32_t, Add, BLOCK_SIZE, ITEMS_PER_THREAD><<<NUM_LOGICAL_BLOCKS, BLOCK_SIZE>>>(d_in, d_out, d_states, size, op, 0, d_dyn_idx_ptr);
+        spsScan<int, I, Add, BLOCK_SIZE, ITEMS_PER_THREAD><<<NUM_LOGICAL_BLOCKS, BLOCK_SIZE>>>(d_in, d_out, d_states, size, op, 0, d_dyn_idx_ptr);
         cudaDeviceSynchronize();
         gettimeofday(&curr, NULL);
         timeval_subtract(&t_diff, &curr, &prev);
@@ -186,7 +188,7 @@ void testScan(uint32_t size) {
     compute_descriptors(temp, RUNS, 2 * ARRAY_BYTES);
     free(temp);
 
-    spsScan<int, uint32_t, Add, BLOCK_SIZE, ITEMS_PER_THREAD><<<NUM_LOGICAL_BLOCKS, BLOCK_SIZE>>>(d_in, d_out, d_states, size, op, 0, d_dyn_idx_ptr);
+    spsScan<int, I, Add, BLOCK_SIZE, ITEMS_PER_THREAD><<<NUM_LOGICAL_BLOCKS, BLOCK_SIZE>>>(d_in, d_out, d_states, size, op, 0, d_dyn_idx_ptr);
     cudaDeviceSynchronize();
 
     gpuAssert(cudaMemcpy(h_out.data(), d_out, ARRAY_BYTES, cudaMemcpyDeviceToHost));
@@ -195,7 +197,7 @@ void testScan(uint32_t size) {
 
     bool test_passes = true;
 
-    for (uint32_t i = 0; i < size; ++i) {
+    for (I i = 0; i < size; ++i) {
         acc += h_in[i];
         test_passes &= h_out[i] == acc;
     }
@@ -215,32 +217,32 @@ void testScan(uint32_t size) {
 int main() {
     info();
     
-    testBlocks(1 << 6);
-    testBlocks(1 << 16);
-    testBlocks(1 << 26);
+    testBlocks<uint32_t>(1 << 6);
+    testBlocks<uint32_t>(1 << 16);
+    testBlocks<uint32_t>(1 << 26);
 
-    testBlocks(1000);
-    testBlocks(100000);
-    testBlocks(10000000);
+    testBlocks<uint32_t>(1000);
+    testBlocks<uint32_t>(100000);
+    testBlocks<uint32_t>(10000000);
     std::cout << "\n";
 
     benchMemcpy(100000000);
     std::cout << "\n";
     
-    testScan(1 << 8);
+    testScan<uint32_t>(1 << 8);
     std::cout << "\n";
-    testScan(1 << 16);
+    testScan<uint32_t>(1 << 16);
     std::cout << "\n";
-    testScan(1 << 26);
+    testScan<uint32_t>(1 << 26);
     std::cout << "\n";
 
-    testScan(1000);
+    testScan<uint32_t>(1000);
     std::cout << "\n";
-    testScan(100000);
+    testScan<uint32_t>(100000);
     std::cout << "\n";
-    testScan(100000000);
+    testScan<uint32_t>(100000000);
     std::cout << "\n" << "500MiB:\n";
-    testScan(131072000);
+    testScan<uint32_t>(131072000);
     std::cout << std::flush;
 
     gpuAssert(cudaPeekAtLastError());

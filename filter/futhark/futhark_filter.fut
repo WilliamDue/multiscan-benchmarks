@@ -32,7 +32,7 @@ entry main [n] (as: [n]i32): *[]i32 =
 -- input @ ../../data/randomints_moderate_500MiB.in
 -- input @ ../../data/randomints_empty_500MiB.in
 -- input @ ../../data/randomints_full_500MiB.in
-entry intscan [n] (as: [n]i32): *[]i32 =
+entry intscan [n] (as: [n]i32): [n]i32 =
   scan (+) 0 as
 
 -- ==

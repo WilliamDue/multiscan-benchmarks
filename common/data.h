@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <assert.h>
 #include <string.h>
+#include <stdbool.h>
 
 union i32 {
   int32_t i;
@@ -93,4 +94,62 @@ int32_t* read_i32_array(const char* filename, size_t* size) {
   free(buffer);
 
   return new_buffer;
+}
+
+void read_i32_bool_array(const char* filename,
+                         int32_t** vals,
+                         size_t* vals_size,
+                         bool** flags,
+                         size_t* flags_size) {
+  assert(*vals == NULL);
+  assert(*flags == NULL);
+  size_t file_size;
+  uint8_t* buffer = read_file(filename, &file_size);
+  assert(buffer != NULL);
+  uint8_t* buffer_ptr = buffer;
+  uint8_t fst_header[7] = {'b', 2U, 1U, ' ', 'i', '3', '2'};
+
+  for (size_t i = 0; i < sizeof(fst_header); i++) {
+    assert(buffer_ptr[i] == fst_header[i]);
+  }
+  buffer_ptr += sizeof(fst_header);
+  
+  union u64 union_vals_size;
+
+  for (uint8_t i = 0; i < sizeof(uint64_t); i++) {
+    union_vals_size.str[i] = buffer_ptr[i];
+  }
+
+  buffer_ptr += sizeof(uint64_t);
+  *vals_size = union_vals_size.i;
+  size_t vals_bytes = union_vals_size.i * sizeof(int32_t);
+  *vals = (int32_t*) malloc(vals_bytes);
+
+  assert(*vals != NULL);
+  memcpy(*vals, buffer_ptr, vals_bytes);
+  buffer_ptr += vals_bytes;
+
+  uint8_t snd_header[7] = {'b', 2U, 1U, 'b', 'o', 'o', 'l'};
+
+  for (size_t i = 0; i < sizeof(snd_header); i++) {
+    printf("%lu\n", (uint64_t) buffer_ptr[i]);
+    // assert(buffer_ptr[i] == snd_header[i]);
+  }
+  assert(0);
+  buffer_ptr += sizeof(snd_header);
+  
+  union u64 union_flags_size;
+
+  for (uint8_t i = 0; i < sizeof(uint64_t); i++) {
+    union_flags_size.str[i] = buffer_ptr[i];
+  }
+
+  buffer_ptr += sizeof(uint64_t);
+  *flags_size = union_flags_size.i;
+  size_t flags_bytes = union_flags_size.i * sizeof(bool);
+  *flags = (bool*) malloc(flags_bytes);
+  assert(*flags != NULL);
+  memcpy(*flags, buffer_ptr, flags_bytes);
+
+  free(buffer);
 }

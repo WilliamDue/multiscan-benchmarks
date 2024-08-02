@@ -169,12 +169,16 @@ void testFilter(int32_t* input, size_t input_size, int32_t* expected, size_t exp
 
 int main(int32_t argc, char *argv[]) {
     assert(argc == 3);
-    size_t input_size;
-    int32_t* input = read_i32_array(argv[1], &input_size);
+    int32_t* vals = NULL;
+    size_t vals_size = 0;
+    bool* flags = NULL;
+    size_t flags_size = 0;
+    read_i32_bool_array(argv[1], &vals, &vals_size, &flags, &flags_size);
     size_t expected_size;
     int32_t* expected = read_i32_array(argv[2], &expected_size);
-    testFilter(input, input_size, expected, expected_size);
-    free(input);
+    // testFilter(input, input_size, expected, expected_size);
+    free(vals);
+    free(flags);
     free(expected);
 
     gpuAssert(cudaPeekAtLastError());
