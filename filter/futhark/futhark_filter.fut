@@ -1,11 +1,11 @@
 -- | Filter implementation which is almost the same as in SOACS.
 -- The difference is since we need it to have a "streamable quality"
 -- for map-scan-map-scatter then we need to first scatter and then cutoff.
-def filter' [n] 'a (p: a -> bool) (as: [n]a): *[]a =
+def filter' [n] 'a (dummy: a) (p: a -> bool) (as: [n]a): *[]a =
   let flags = map (\x -> if p x then 1 else 0) as
   let offsets = scan (+) 0 flags
   let result =
-    scatter (copy as)
+    scatter (replicate n dummy)
             (map2 (\f o -> if f==1 then o-1 else -1) flags offsets)
             as
   let m = if n == 0 then 0 else offsets[n-1]
@@ -23,7 +23,7 @@ def filter' [n] 'a (p: a -> bool) (as: [n]a): *[]a =
 -- input @ ../../data/randomints_full_500MiB.in
 -- output @ ../randomints_full_500MiB.out
 entry main [n] (as: [n]i32): *[]i32 =
-  filter' (0i32<) as
+  filter' 0 (0i32<) as
 
 -- ==
 -- entry: intscan

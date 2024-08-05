@@ -107,7 +107,7 @@ void read_i32_bool_array(const char* filename,
   uint8_t* buffer = read_file(filename, &file_size);
   assert(buffer != NULL);
   uint8_t* buffer_ptr = buffer;
-  uint8_t fst_header[7] = {'b', 2U, 1U, ' ', 'i', '3', '2'};
+  char fst_header[7] = {'b', 2, 1, ' ', 'i', '3', '2'};
 
   for (size_t i = 0; i < sizeof(fst_header); i++) {
     assert(buffer_ptr[i] == fst_header[i]);
@@ -129,13 +129,12 @@ void read_i32_bool_array(const char* filename,
   memcpy(*vals, buffer_ptr, vals_bytes);
   buffer_ptr += vals_bytes;
 
-  uint8_t snd_header[7] = {'b', 2U, 1U, 'b', 'o', 'o', 'l'};
+  char snd_header[7] = {'b', 2, 1, 'b', 'o', 'o', 'l'};
 
   for (size_t i = 0; i < sizeof(snd_header); i++) {
-    printf("%lu\n", (uint64_t) buffer_ptr[i]);
-    // assert(buffer_ptr[i] == snd_header[i]);
+    assert(buffer_ptr[i] == snd_header[i]);
   }
-  assert(0);
+
   buffer_ptr += sizeof(snd_header);
   
   union u64 union_flags_size;

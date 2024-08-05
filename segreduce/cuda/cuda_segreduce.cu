@@ -5,41 +5,92 @@
 #include "../../common/util.cu.h"
 #include "../../common/data.h"
 
-template<typename I>
+template<typename T, typename I>
+struct Tuple {
+    T elem = T();
+    I idx = I();
+    bool flag = false;
+
+    __host__ __device__
+    Tuple(T elem, I idx, bool flag) : elem(elem), idx(idx), flag(flag) {}
+    
+    __host__ __device__
+    Tuple() : elem(T()), idx(I()), flag(false) {}
+
+    __host__ __device__
+    Tuple(const Tuple<T, I>& other) : elem(other.elem), idx(other.idx), flag(other.flag) {}
+
+    __host__ __device__
+    Tuple(const volatile Tuple<T, I>& other) : elem(other.elem), idx(other.idx), flag(other.flag) {}
+    
+    __host__ __device__
+    Tuple<T, I>& operator=(const Tuple<T, I>& other) {
+        if (this != &other) {
+            elem = other.elem;
+            idx = other.idx;
+            flag = other.flag;
+        }
+        return *this;
+    }
+
+    __host__ __device__
+    Tuple<T, I>& operator=(const volatile Tuple<T, I>& other) volatile {
+        if (this != &other) {
+            elem = other.elem;
+            idx = other.idx;
+            flag = other.flag;
+        }
+        return *const_cast<Tuple<T, I>*>(this);
+    }
+
+    __host__ __device__
+    Tuple<T, I>& operator=(const Tuple<T, I>& other) volatile {
+        if (this != &other) {
+            elem = other.elem;
+            idx = other.idx;
+            flag = other.flag;
+        }
+        return *const_cast<Tuple<T, I>*>(this);
+    }
+};
+
+template<typename T, typename I, typename OP>
+struct AddTuple {
+    OP op;
+
+    __host__ __device__
+    AddTuple(OP op) : op(op) {}
+
+    __device__ inline Tuple<T, I> operator()(Tuple<T, I> a, Tuple<T, I> b) const {
+        return Tuple<T, I>(
+            b.flag ? b.elem : op(a.elem, b.elem),
+            a.idx + b.idx,
+            a.flag || b.flag
+        );
+    }
+};
+
+
 struct Add {
-    __device__ inline I operator()(I a, I b) const {
+    __device__ inline int32_t operator()(int32_t a, int32_t b) const {
         return a + b;
     }
 };
 
-
-struct Predicate {
-    __device__ inline bool operator()(int32_t a) const {
-        return 0 < a;
-    }
-};
-
-template<typename T>
-struct Identity {
-    __device__ inline T operator()(T a) const {
-        return a;
-    }
-};
-
-template<typename T, typename I, typename PRED, I BLOCK_SIZE, I ITEMS_PER_THREAD>
+template<typename T, typename I, typename OP, I BLOCK_SIZE, I ITEMS_PER_THREAD>
 __global__ void
-filter(T* d_in,
-       T* d_out,
-       volatile State<I>* states,
-       I size,
-       I num_logical_blocks,
-       PRED pred,
-       volatile uint32_t* dyn_idx_ptr,
-       volatile I* new_size) {
-    volatile __shared__ I block[ITEMS_PER_THREAD * BLOCK_SIZE];
-    volatile __shared__ I block_aux[BLOCK_SIZE];
-    T elems[ITEMS_PER_THREAD];
-    bool bools[ITEMS_PER_THREAD];
+segreduce(T* d_in,
+          bool* d_flags,
+          T* d_out,
+          volatile State<Tuple<T, I>>* states,
+          I size,
+          I num_logical_blocks,
+          AddTuple<T, I, OP> op,
+          volatile uint32_t* dyn_idx_ptr,
+          volatile I* new_size) {
+    volatile __shared__ Tuple<T, I> block[ITEMS_PER_THREAD * BLOCK_SIZE];
+    volatile __shared__ Tuple<T, I> block_aux[BLOCK_SIZE];
+    bool flags[ITEMS_PER_THREAD];
 
     uint32_t dyn_idx = dynamicIndex<uint32_t>(dyn_idx_ptr);
     I glb_offs = dyn_idx * BLOCK_SIZE * ITEMS_PER_THREAD;
@@ -49,68 +100,67 @@ filter(T* d_in,
         I lid = i * blockDim.x + threadIdx.x;
         I gid = glb_offs + lid;
         if (gid < size) {
-            elems[i] = d_in[gid];
-            bools[i] = pred(elems[i]);
-            block[lid] = bools[i];
+            flags[i] = d_flags[(gid + 1) % size];
+            block[lid] = Tuple<T, I>(d_in[gid], flags[i], d_flags[gid]);
         } else {
-            bools[i] = false;
-            block[lid] = 0;
+            flags[i] = false;
+            block[lid] = Tuple<T, I>();
         }
     }
+
     __syncthreads();
 
-    scan<I, I, Add<I>, ITEMS_PER_THREAD>(block, block_aux, states, Add<I>(), 0, dyn_idx);
+    scan<Tuple<T, I>, I, AddTuple<T, I, OP>, ITEMS_PER_THREAD>(block, block_aux, states, op, Tuple<T, I>(), dyn_idx);
 
     #pragma unroll
     for (I i = 0; i < ITEMS_PER_THREAD; i++) {
         I lid = blockDim.x * i + threadIdx.x;
         I gid = glb_offs + lid;
-        if (gid < size && bools[i]) {
-            d_out[block[lid] - 1] = elems[i];
+        if (gid < size && flags[i]) {
+            d_out[block[lid].idx - 1] = block[lid].elem;
         }
     }
     
     if (dyn_idx == num_logical_blocks - 1 && threadIdx.x == blockDim.x - 1) {
-        *new_size = block[ITEMS_PER_THREAD * BLOCK_SIZE - 1];
+        *new_size = block[ITEMS_PER_THREAD * BLOCK_SIZE - 1].idx;
     }
     __syncthreads();
 }
 
-void testFilter(int32_t* input, size_t input_size, int32_t* expected, size_t expected_size) {
+void testSegreduce(int32_t* vals, bool* flags, size_t _size, int32_t* expected, size_t expected_size) {
     using I = uint32_t;
-    const I size = input_size;
+    const I size = _size;
     const I BLOCK_SIZE = 256;
-    const I ITEMS_PER_THREAD = 15;
+    const I ITEMS_PER_THREAD = 14;
     const I NUM_LOGICAL_BLOCKS = (size + BLOCK_SIZE * ITEMS_PER_THREAD - 1) / (BLOCK_SIZE * ITEMS_PER_THREAD);
     const I ARRAY_BYTES = size * sizeof(int32_t);
-    const I STATES_BYTES = NUM_LOGICAL_BLOCKS * sizeof(State<I>);
+    const I FLAG_ARRAY_BYTES = size * sizeof(bool);
+    const I STATES_BYTES = NUM_LOGICAL_BLOCKS * sizeof(State<Tuple<int32_t, I>>);
     const I WARMUP_RUNS = 1000;
     const I RUNS = 10;
 
-    std::vector<int32_t> h_in(size);
     std::vector<int32_t> h_out(size, 0);
-
-    for (I i = 0; i < size; ++i) {
-        h_in[i] = input[i];
-    }
     
     uint32_t* d_dyn_idx_ptr;
     I* d_new_size;
     int32_t *d_in, *d_out;
-    State<I>* d_states;
+    bool *d_flags;
+    State<Tuple<int32_t, I>>* d_states;
     gpuAssert(cudaMalloc((void**)&d_dyn_idx_ptr, sizeof(uint32_t)));
     gpuAssert(cudaMalloc((void**)&d_new_size, sizeof(I)));
+    gpuAssert(cudaMalloc((void**)&d_flags, FLAG_ARRAY_BYTES));
     cudaMemset(d_dyn_idx_ptr, 0, sizeof(uint32_t));
     gpuAssert(cudaMalloc((void**)&d_states, STATES_BYTES));
     gpuAssert(cudaMalloc((void**)&d_in, ARRAY_BYTES));
     gpuAssert(cudaMalloc((void**)&d_out, ARRAY_BYTES));
     
-    gpuAssert(cudaMemcpy(d_in, h_in.data(), ARRAY_BYTES, cudaMemcpyHostToDevice));
+    gpuAssert(cudaMemcpy(d_in, vals, ARRAY_BYTES, cudaMemcpyHostToDevice));
+    gpuAssert(cudaMemcpy(d_flags, flags, FLAG_ARRAY_BYTES, cudaMemcpyHostToDevice));
     
-    Predicate pred = Predicate();
+    AddTuple<int32_t, I, Add> add = AddTuple<int32_t, I, Add>(Add());
     
     for (I i = 0; i < WARMUP_RUNS; ++i) {
-        filter<int32_t, I, Predicate, BLOCK_SIZE, ITEMS_PER_THREAD><<<NUM_LOGICAL_BLOCKS, BLOCK_SIZE>>>(d_in, d_out, d_states, size, NUM_LOGICAL_BLOCKS, pred, d_dyn_idx_ptr, d_new_size);
+        segreduce<int32_t, I, Add, BLOCK_SIZE, ITEMS_PER_THREAD><<<NUM_LOGICAL_BLOCKS, BLOCK_SIZE>>>(d_in, d_flags, d_out, d_states, size, NUM_LOGICAL_BLOCKS, add, d_dyn_idx_ptr, d_new_size);
         cudaDeviceSynchronize();
         cudaMemset(d_dyn_idx_ptr, 0, sizeof(uint32_t));
         gpuAssert(cudaPeekAtLastError());
@@ -123,7 +173,7 @@ void testFilter(int32_t* input, size_t input_size, int32_t* expected, size_t exp
 
     for (I i = 0; i < RUNS; ++i) {
         gettimeofday(&prev, NULL);
-        filter<int32_t, I, Predicate, BLOCK_SIZE, ITEMS_PER_THREAD><<<NUM_LOGICAL_BLOCKS, BLOCK_SIZE>>>(d_in, d_out, d_states, size, NUM_LOGICAL_BLOCKS, pred, d_dyn_idx_ptr, d_new_size);
+        segreduce<int32_t, I, Add, BLOCK_SIZE, ITEMS_PER_THREAD><<<NUM_LOGICAL_BLOCKS, BLOCK_SIZE>>>(d_in, d_flags, d_out, d_states, size, NUM_LOGICAL_BLOCKS, add, d_dyn_idx_ptr, d_new_size);
         cudaDeviceSynchronize();
         gettimeofday(&curr, NULL);
         timeval_subtract(&t_diff, &curr, &prev);
@@ -138,26 +188,27 @@ void testFilter(int32_t* input, size_t input_size, int32_t* expected, size_t exp
     compute_descriptors(temp, RUNS, ARRAY_BYTES + temp_size * sizeof(int32_t));
     free(temp);
 
-    filter<int32_t, I, Predicate, BLOCK_SIZE, ITEMS_PER_THREAD><<<NUM_LOGICAL_BLOCKS, BLOCK_SIZE>>>(d_in, d_out, d_states, size, NUM_LOGICAL_BLOCKS, pred, d_dyn_idx_ptr, d_new_size);
+    segreduce<int32_t, I, Add, BLOCK_SIZE, ITEMS_PER_THREAD><<<NUM_LOGICAL_BLOCKS, BLOCK_SIZE>>>(d_in, d_flags, d_out, d_states, size, NUM_LOGICAL_BLOCKS, add, d_dyn_idx_ptr, d_new_size);
     cudaDeviceSynchronize();
     gpuAssert(cudaMemcpy(h_out.data(), d_out, ARRAY_BYTES, cudaMemcpyDeviceToHost));
     gpuAssert(cudaMemcpy(&temp_size, d_new_size, sizeof(I), cudaMemcpyDeviceToHost));
     
     bool test_passes = temp_size == expected_size;
     if (!test_passes) {
-        std::cout << "Filter Test Failed: Expected size=" << expected_size << " but got size=" << temp_size << std::endl;
+        std::cout << "Segreduce Test Failed: Expected size=" << expected_size << " but got size=" << temp_size << std::endl;
     } else {
         for (I i = 0; i < expected_size; ++i) {
             test_passes &= h_out[i] == expected[i];
 
             if (!test_passes) {
-                std::cout << "Filter Test Failed: Due to elements mismatch at index=" << i << std::endl;
+                std::cout << "Segreduce Test Failed: Due to elements mismatch at index=" << i << std::endl;
+                break;
             }
         } 
     }
 
     if (test_passes) {
-        std::cout << "Filter test passed." << std::endl;
+        std::cout << "Segreduce test passed." << std::endl;
     }
 
     gpuAssert(cudaFree(d_in));
@@ -176,7 +227,14 @@ int main(int32_t argc, char *argv[]) {
     read_i32_bool_array(argv[1], &vals, &vals_size, &flags, &flags_size);
     size_t expected_size;
     int32_t* expected = read_i32_array(argv[2], &expected_size);
-    // testFilter(input, input_size, expected, expected_size);
+    assert(vals_size == flags_size);
+    /*
+    int32_t a[6] = {1, 2, 3, 4, 5, 6};
+    bool b[6] = {true, false, false, true, false, false};
+    int32_t c[2] = {6, 15};
+    testSegreduce(a, b, 6, c, 2);
+    */
+    testSegreduce(vals, flags, vals_size, expected, expected_size);
     free(vals);
     free(flags);
     free(expected);

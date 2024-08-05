@@ -64,13 +64,6 @@ struct Predicate {
     }
 };
 
-template<typename T>
-struct Identity {
-    __device__ inline T operator()(T a) const {
-        return a;
-    }
-};
-
 template<typename T, typename I, typename PRED, I BLOCK_SIZE, I ITEMS_PER_THREAD>
 __global__ void
 partition(T* d_in,

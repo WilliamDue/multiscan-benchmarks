@@ -40,8 +40,7 @@ template<typename T, typename I, typename OP, I ITEMS_PER_THREAD>
 __device__ inline T
 scanThread(volatile T* shmem,
            volatile T* shmem_aux,
-           OP op,
-           const T ne) {
+           OP op) {
     const I offset = threadIdx.x * ITEMS_PER_THREAD;
     const I upper = offset + ITEMS_PER_THREAD;
     T acc = shmem[offset];
@@ -107,7 +106,7 @@ addAuxBlockScan(volatile T* shmem,
         const T val = shmem_aux[threadIdx.x - 1];
         #pragma unroll
         for (I lid = offset; lid < upper; lid++) {
-            shmem[lid] = op(shmem[lid], val);
+            shmem[lid] = op(val, shmem[lid]);
         }
     }
 	__syncthreads();
@@ -115,15 +114,15 @@ addAuxBlockScan(volatile T* shmem,
 
 template<typename T, typename I, typename OP, I ITEMS_PER_THREAD>
 __device__ inline void
-scanBlock(volatile T* shmem,
-          volatile T* shmem_aux,
-          OP op,
-          const T ne) {
-    scanThread<T, I, OP, ITEMS_PER_THREAD>(shmem, shmem_aux, op, ne);
+scanBlock(volatile T* block,
+          volatile T* block_aux,
+          OP op) {
+    scanThread<T, I, OP, ITEMS_PER_THREAD>(block, block_aux, op);
 
-    scanBlock<T, I, OP>(shmem_aux, op);
-    
-    addAuxBlockScan<T, I, OP, ITEMS_PER_THREAD>(shmem, shmem_aux, op);
+
+    scanBlock<T, I, OP>(block_aux, op);
+
+    addAuxBlockScan<T, I, OP, ITEMS_PER_THREAD>(block, block_aux, op);
 }
 
 template<typename I>
@@ -213,7 +212,7 @@ decoupledLookbackScan(volatile State<T>* states,
                       volatile T* shmem,
                       OP op,
                       const T ne,
-                      I dyn_idx) {
+                      uint32_t dyn_idx) {
     volatile __shared__ T values[WARP];
     volatile __shared__ Status statuses[WARP];
     volatile __shared__ T shmem_prefix;
@@ -234,8 +233,6 @@ decoupledLookbackScan(volatile State<T>* states,
     } else if (is_first) {
         states[dyn_idx].status = Aggregate;
     }
-
-        
 
     T prefix = ne;
     if (threadIdx.x < WARP && dyn_idx != 0) {
@@ -298,8 +295,9 @@ scan(volatile T* block,
      volatile State<T>* states,
      OP op,
      const T ne,
-     I dyn_idx) {
-    scanBlock<T, I, OP, ITEMS_PER_THREAD>(block, block_aux, op, ne);
+     uint32_t dyn_idx) {
+    
+    scanBlock<T, I, OP, ITEMS_PER_THREAD>(block, block_aux, op);
 
     decoupledLookbackScan<T, I, OP, ITEMS_PER_THREAD>(states, block, op, ne, dyn_idx);
 }
