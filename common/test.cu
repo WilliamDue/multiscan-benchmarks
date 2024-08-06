@@ -23,7 +23,7 @@ scanBlocks(T* d_in,
 
     glbToShmemCpy<T, I, ITEMS_PER_THREAD>(glb_offs, size, ne, d_in, block);
 
-    scanBlock<T, I, OP, ITEMS_PER_THREAD>(block, block_aux, op, ne);
+    scanBlock<T, I, OP, ITEMS_PER_THREAD>(block, block_aux, op);
     
     shmemToGlbCpy<T, I, ITEMS_PER_THREAD>(glb_offs, size, d_out, block);
 }

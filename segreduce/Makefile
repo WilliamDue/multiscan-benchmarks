@@ -79,11 +79,11 @@ bench: randomints_dense_500MiB.out \
 	   $(CUDA_PROGRAM) \
 	   $(FUTHARK_PROGRAM)
 	futhark bench $(FUTHARK_PATH)/$(FUTHARK_PROGRAM).fut --backend=cuda
-	./$(CUDA_PROGRAM) ./randomints_dense_500MiB.in ./randomints_dense_500MiB.out
-	./$(CUDA_PROGRAM) ./randomints_sparse_500MiB.in ./randomints_sparse_500MiB.out
-	./$(CUDA_PROGRAM) ./randomints_moderate_500MiB.in ./randomints_moderate_500MiB.out
-	./$(CUDA_PROGRAM) ./randomints_empty_500MiB.in ./randomints_empty_500MiB.out
 	./$(CUDA_PROGRAM) ./randomints_full_500MiB.in ./randomints_full_500MiB.out
+	./$(CUDA_PROGRAM) ./randomints_dense_500MiB.in ./randomints_dense_500MiB.out
+	./$(CUDA_PROGRAM) ./randomints_moderate_500MiB.in ./randomints_moderate_500MiB.out
+	./$(CUDA_PROGRAM) ./randomints_sparse_500MiB.in ./randomints_sparse_500MiB.out
+	./$(CUDA_PROGRAM) ./randomints_empty_500MiB.in ./randomints_empty_500MiB.out
 
 $(CUDA_PROGRAM): $(CUDA_PATH)/$(CUDA_PROGRAM).cu $(COMMON_PATH)/sps.cu.h $(COMMON_PATH)/util.cu.h $(COMMON_PATH)/data.h
 	$(COMPILER) $(FLAGS) -o $@ $<

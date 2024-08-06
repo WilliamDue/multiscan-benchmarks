@@ -19,40 +19,40 @@ entry flags [n] (as : [n]i32) =
   map (0i32<) as
 
 -- ==
--- input @ ../randomints_sparse_500MiB.in
--- output @ ../randomints_sparse_500MiB.out
+-- input @ ../randomints_full_500MiB.in
+-- output @ ../randomints_full_500MiB.out
 -- input @ ../randomints_dense_500MiB.in
 -- output @ ../randomints_dense_500MiB.out
 -- input @ ../randomints_moderate_500MiB.in
 -- output @ ../randomints_moderate_500MiB.out
+-- input @ ../randomints_sparse_500MiB.in
+-- output @ ../randomints_sparse_500MiB.out
 -- input @ ../randomints_empty_500MiB.in
 -- output @ ../randomints_empty_500MiB.out
--- input @ ../randomints_full_500MiB.in
--- output @ ../randomints_full_500MiB.out
 entry main [n] (as: [n]i32) (flags: [n]bool) =
   segreduce' (+) 0 flags as
 
 -- ==
 -- entry: intscan
--- input @ ../randomints_sparse_500MiB.in
+-- input @ ../randomints_full_500MiB.in
 -- input @ ../randomints_dense_500MiB.in
 -- input @ ../randomints_moderate_500MiB.in
+-- input @ ../randomints_sparse_500MiB.in
 -- input @ ../randomints_empty_500MiB.in
--- input @ ../randomints_full_500MiB.in
 entry intscan [n] (as: [n]i32) (_: [n]bool): [n]i32 =
   scan (+) 0 as
 
 -- ==
 -- entry: expected
--- input @ ../randomints_sparse_500MiB.in
--- output @ ../randomints_sparse_500MiB.out
+-- input @ ../randomints_full_500MiB.in
+-- output @ ../randomints_full_500MiB.out
 -- input @ ../randomints_dense_500MiB.in
 -- output @ ../randomints_dense_500MiB.out
 -- input @ ../randomints_moderate_500MiB.in
 -- output @ ../randomints_moderate_500MiB.out
+-- input @ ../randomints_sparse_500MiB.in
+-- output @ ../randomints_sparse_500MiB.out
 -- input @ ../randomints_empty_500MiB.in
 -- output @ ../randomints_empty_500MiB.out
--- input @ ../randomints_full_500MiB.in
--- output @ ../randomints_full_500MiB.out
 entry expected [n] (as: [n]i32) (flags: [n]bool) =
   segmented_reduce (+) 0 flags as

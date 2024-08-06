@@ -16,7 +16,6 @@ module type lexer_context = {
   val terminal_offset: endomorphism_module.t
   val accept_offset: endomorphism_module.t
   val produce_offset: endomorphism_module.t
-  val is_ignore: terminal_module.t -> bool
   val transitions_to_endomorphisms: [256]endomorphism_module.t
   val compositions: [endomorphism_size * endomorphism_size]endomorphism_module.t
   val dead_terminal: terminal_module.t
@@ -110,8 +109,6 @@ module lexer = mk_lexer {
   def accept_offset: endomorphism = 7
   def produce_mask: endomorphism = 256
   def produce_offset: endomorphism = 8
-
-  def is_ignore (t : terminal) : bool = 0 == t
 
   def endomorphism_size: i64 = 12
 
