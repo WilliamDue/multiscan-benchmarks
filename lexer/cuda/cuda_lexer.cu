@@ -10,7 +10,7 @@ using state_t = uint32_t;
 
 const uint32_t NUM_STATES = 12;
 const uint32_t NUM_TRANS = 256;
-const token_t IGNORE_TOKEN = 0;
+// const token_t IGNORE_TOKEN = 0;
 const state_t ENDO_MASK = 15;
 const state_t ENDO_OFFSET = 0;
 const state_t TOKEN_MASK = 112;
@@ -114,6 +114,7 @@ struct Add {
     }
 };
 
+
 template<typename I, I BLOCK_SIZE, I ITEMS_PER_THREAD>
 __global__ void
 lexer(LexerCtx *ctx,
@@ -131,6 +132,7 @@ lexer(LexerCtx *ctx,
     volatile __shared__ I indices[ITEMS_PER_THREAD * BLOCK_SIZE];
     volatile __shared__ I indices_aux[BLOCK_SIZE];
     bool is_produce_state[ITEMS_PER_THREAD];
+
 
     uint32_t dyn_index = dynamicIndex<uint32_t>(dyn_index_ptr);
     I glb_offs = dyn_index * BLOCK_SIZE * ITEMS_PER_THREAD;
@@ -184,7 +186,7 @@ void testLexer(uint8_t* input, size_t input_size) {
     using I = uint32_t;
     const I size = input_size;
     const I BLOCK_SIZE = 256;
-    const I ITEMS_PER_THREAD = 15;
+    const I ITEMS_PER_THREAD = 22;
     const I NUM_LOGICAL_BLOCKS = (size + BLOCK_SIZE * ITEMS_PER_THREAD - 1) / (BLOCK_SIZE * ITEMS_PER_THREAD);
     const I IN_ARRAY_BYTES = size * sizeof(uint8_t);
     const I INDEX_OUT_ARRAY_BYTES = size * sizeof(I);
@@ -192,7 +194,7 @@ void testLexer(uint8_t* input, size_t input_size) {
     const I STATE_STATES_BYTES = NUM_LOGICAL_BLOCKS * sizeof(State<state_t>);
     const I INDEX_STATES_BYTES = NUM_LOGICAL_BLOCKS * sizeof(State<I>);
     const I WARMUP_RUNS = 1000;
-    const I RUNS = 10;
+    const I RUNS = 50;
 
     std::vector<token_t> h_token_out(size, 0);
     std::vector<I> h_index_out(size, 0);
@@ -285,19 +287,12 @@ void testLexer(uint8_t* input, size_t input_size) {
 }
 
 int main(int32_t argc, char *argv[]) {
-    /*
-    assert(argc == 3);
+    assert(argc == 2);
     size_t input_size;
-    int32_t* input = read_i32_array(argv[1], &input_size);
-    size_t expected_size;
-    int32_t* expected = read_i32_array(argv[2], &expected_size);
-    free(input);
-    free(expected);
-    */
-    uint8_t input[9] = {'t', 'e', 's', 't', ' ', 't', 'e', 's', 't'};
-    size_t input_size = 9;
+    uint8_t* input = read_file(argv[1], &input_size);
     testLexer(input, input_size);
 
+    free(input);
     gpuAssert(cudaPeekAtLastError());
     return 0;
 }

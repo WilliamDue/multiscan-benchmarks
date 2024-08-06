@@ -383,7 +383,9 @@ module lexer = mk_lexer {
 75u16, 75u16, 75u16, 75u16, 75u16, 75u16, 75u16, 75u16, 75u16, 75u16, 75u16, 75u16] :> [endomorphism_size * endomorphism_size]endomorphism
 }
 
-
+-- ==
+-- entry: lex
+-- script input { $loadbytes "../../data/tokens_500MiB.in" }
 entry lex s =
   match lexer.lex s
   case #some r ->
