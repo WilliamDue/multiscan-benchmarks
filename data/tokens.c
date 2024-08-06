@@ -46,10 +46,9 @@ int random_token() {
 
 int main(int argc, char *argv[]) {
   assert(argc == 2);
-  int max_size = 0;
-  sscanf(argv[1], "%d", &max_size);
-  assert(0 <= max_size);
-  int curr_size = 0;
+  unsigned long max_size = 0;
+  sscanf(argv[1], "%lu", &max_size);
+  unsigned long curr_size = 0;
   while (curr_size < max_size) {
     curr_size += random_token();
   }

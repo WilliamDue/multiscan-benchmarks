@@ -221,8 +221,6 @@ void testLexer(uint8_t* input, size_t input_size) {
     for (I i = 0; i < WARMUP_RUNS; ++i) {
         lexer<I, BLOCK_SIZE, ITEMS_PER_THREAD><<<NUM_LOGICAL_BLOCKS, BLOCK_SIZE>>>(&ctx, d_in, d_index_out, d_token_out, d_state_states, d_index_states, size, NUM_LOGICAL_BLOCKS, d_dyn_index_ptr, d_new_size);
         cudaDeviceSynchronize();
-        I temp_size = 0;
-
         cudaMemset(d_dyn_index_ptr, 0, sizeof(uint32_t));
         gpuAssert(cudaPeekAtLastError());
     }
@@ -246,7 +244,7 @@ void testLexer(uint8_t* input, size_t input_size) {
 
     I temp_size = 0;
     gpuAssert(cudaMemcpy(&temp_size, d_new_size, sizeof(I), cudaMemcpyDeviceToHost));
-    compute_descriptors(temp, RUNS, IN_ARRAY_BYTES + temp_size * (sizeof(int32_t) + sizeof(token_t)));
+    compute_descriptors(temp, RUNS, IN_ARRAY_BYTES);
     free(temp);
 
     lexer<I, BLOCK_SIZE, ITEMS_PER_THREAD><<<NUM_LOGICAL_BLOCKS, BLOCK_SIZE>>>(&ctx, d_in, d_index_out, d_token_out, d_state_states, d_index_states, size, NUM_LOGICAL_BLOCKS, d_dyn_index_ptr, d_new_size);
