@@ -11,19 +11,19 @@ struct Tuple {
     I idx = I();
     bool flag = false;
 
-    __host__ __device__
+    __host__ __device__ __forceinline__
     Tuple(T elem, I idx, bool flag) : elem(elem), idx(idx), flag(flag) {}
     
-    __host__ __device__
+    __host__ __device__ __forceinline__
     Tuple() : elem(T()), idx(I()), flag(false) {}
 
-    __host__ __device__
+    __host__ __device__ __forceinline__
     Tuple(const Tuple<T, I>& other) : elem(other.elem), idx(other.idx), flag(other.flag) {}
 
-    __host__ __device__
+    __host__ __device__ __forceinline__
     Tuple(const volatile Tuple<T, I>& other) : elem(other.elem), idx(other.idx), flag(other.flag) {}
     
-    __host__ __device__
+    __host__ __device__ __forceinline__
     Tuple<T, I>& operator=(const Tuple<T, I>& other) {
         if (this != &other) {
             elem = other.elem;
@@ -33,7 +33,7 @@ struct Tuple {
         return *this;
     }
 
-    __host__ __device__
+    __host__ __device__ __forceinline__
     Tuple<T, I>& operator=(const volatile Tuple<T, I>& other) volatile {
         if (this != &other) {
             elem = other.elem;
@@ -43,7 +43,7 @@ struct Tuple {
         return *const_cast<Tuple<T, I>*>(this);
     }
 
-    __host__ __device__
+    __host__ __device__ __forceinline__
     Tuple<T, I>& operator=(const Tuple<T, I>& other) volatile {
         if (this != &other) {
             elem = other.elem;
@@ -58,10 +58,10 @@ template<typename T, typename I, typename OP>
 struct AddTuple {
     OP op;
 
-    __host__ __device__
+    __host__ __device__ __forceinline__
     AddTuple(OP op) : op(op) {}
 
-    __device__ inline Tuple<T, I> operator()(Tuple<T, I> a, Tuple<T, I> b) const {
+    __device__ __forceinline__ Tuple<T, I> operator()(Tuple<T, I> a, Tuple<T, I> b) const {
         return Tuple<T, I>(
             b.flag ? b.elem : op(a.elem, b.elem),
             a.idx + b.idx,
@@ -72,7 +72,7 @@ struct AddTuple {
 
 
 struct Add {
-    __device__ inline int32_t operator()(int32_t a, int32_t b) const {
+    __device__ __forceinline__ int32_t operator()(int32_t a, int32_t b) const {
         return a + b;
     }
 };
@@ -185,7 +185,7 @@ void testSegreduce(int32_t* vals, bool* flags, size_t _size, int32_t* expected, 
 
     I temp_size = 0;
     gpuAssert(cudaMemcpy(&temp_size, d_new_size, sizeof(I), cudaMemcpyDeviceToHost));
-    compute_descriptors(temp, RUNS, ARRAY_BYTES + temp_size * sizeof(int32_t));
+    compute_descriptors(temp, RUNS, FLAG_ARRAY_BYTES + ARRAY_BYTES + temp_size * sizeof(int32_t));
     free(temp);
 
     segreduce<int32_t, I, Add, BLOCK_SIZE, ITEMS_PER_THREAD><<<NUM_LOGICAL_BLOCKS, BLOCK_SIZE>>>(d_in, d_flags, d_out, d_states, size, NUM_LOGICAL_BLOCKS, add, d_dyn_idx_ptr, d_new_size);

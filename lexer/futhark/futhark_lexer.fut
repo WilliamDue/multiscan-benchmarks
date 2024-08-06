@@ -385,7 +385,9 @@ module lexer = mk_lexer {
 
 -- ==
 -- entry: lex
--- script input { $loadbytes "../../data/tokens_500MiB.in" }
+-- script input { $loadbytes "../../data/tokens_dense_500MiB.in" }
+-- script input { $loadbytes "../../data/tokens_moderate_500MiB.in" }
+-- script input { $loadbytes "../../data/tokens_sparse_500MiB.in" }
 entry lex s =
   match lexer.lex s
   case #some r ->

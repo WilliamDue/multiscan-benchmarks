@@ -4,9 +4,10 @@
 #include "../../common/sps.cu.h"
 #include "../../common/util.cu.h"
 #include "../../common/data.h"
+#include <math.h>
 
 using token_t = uint8_t;
-using state_t = uint32_t;
+using state_t = uint16_t;
 
 const uint32_t NUM_STATES = 12;
 const uint32_t NUM_TRANS = 256;
@@ -109,7 +110,7 @@ struct LexerCtx {
 
 template<typename I>
 struct Add {
-    __device__ inline I operator()(I a, I b) const {
+    __device__ __forceinline__ I operator()(I a, I b) const {
         return a + b;
     }
 };
@@ -186,14 +187,14 @@ void testLexer(uint8_t* input, size_t input_size) {
     using I = uint32_t;
     const I size = input_size;
     const I BLOCK_SIZE = 256;
-    const I ITEMS_PER_THREAD = 22;
+    const I ITEMS_PER_THREAD = 30;
     const I NUM_LOGICAL_BLOCKS = (size + BLOCK_SIZE * ITEMS_PER_THREAD - 1) / (BLOCK_SIZE * ITEMS_PER_THREAD);
     const I IN_ARRAY_BYTES = size * sizeof(uint8_t);
     const I INDEX_OUT_ARRAY_BYTES = size * sizeof(I);
     const I TOKEN_OUT_ARRAY_BYTES = size * sizeof(token_t);
     const I STATE_STATES_BYTES = NUM_LOGICAL_BLOCKS * sizeof(State<state_t>);
     const I INDEX_STATES_BYTES = NUM_LOGICAL_BLOCKS * sizeof(State<I>);
-    const I WARMUP_RUNS = 1000;
+    const I WARMUP_RUNS = 500;
     const I RUNS = 50;
 
     std::vector<token_t> h_token_out(size, 0);
@@ -244,7 +245,11 @@ void testLexer(uint8_t* input, size_t input_size) {
 
     I temp_size = 0;
     gpuAssert(cudaMemcpy(&temp_size, d_new_size, sizeof(I), cudaMemcpyDeviceToHost));
-    compute_descriptors(temp, RUNS, IN_ARRAY_BYTES);
+    const I OUT_WRITE = temp_size * (sizeof(I) + sizeof(token_t));
+    const I IN_READ = IN_ARRAY_BYTES;
+    const I IN_STATE_MAP = sizeof(state_t) * size;
+    const I SCAN_READ =  sizeof(state_t) * (size + size / 2); // Lowerbound, it does more work.
+    compute_descriptors(temp, RUNS, IN_READ + IN_STATE_MAP + SCAN_READ + OUT_WRITE);
     free(temp);
 
     lexer<I, BLOCK_SIZE, ITEMS_PER_THREAD><<<NUM_LOGICAL_BLOCKS, BLOCK_SIZE>>>(&ctx, d_in, d_index_out, d_token_out, d_state_states, d_index_states, size, NUM_LOGICAL_BLOCKS, d_dyn_index_ptr, d_new_size);

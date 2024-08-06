@@ -18,12 +18,12 @@ void random_whitespace() {
   putchar(whitespace[rand()%sizeof(whitespace)]);
 }
 
-int random_token() {
+int random_token( unsigned short lowerbound,  unsigned short upperbound) {
   int i = rand() % 4;
   switch (i) {
   case 0:
     {
-      int count = 3 + rand() % 17;
+      int count = lowerbound + rand() % upperbound;
       for (int j = 0; j < count; j++) { random_letter(); }
       return count;
     }
@@ -45,11 +45,14 @@ int random_token() {
 }
 
 int main(int argc, char *argv[]) {
-  assert(argc == 2);
+  assert(argc == 3);
   unsigned long max_size = 0;
   sscanf(argv[1], "%lu", &max_size);
+  unsigned short lowerbound = 0;
+  unsigned short upperbound = 0;
+  sscanf(argv[2], "%hu:%hu", &lowerbound, &upperbound);
   unsigned long curr_size = 0;
   while (curr_size < max_size) {
-    curr_size += random_token();
+    curr_size += random_token(lowerbound, upperbound);
   }
 }

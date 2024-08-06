@@ -9,7 +9,9 @@ default: $(RANDOM_INTS)_full_500MiB.in \
 		 $(RANDOM_INTS)_moderate_500MiB.in \
 		 $(RANDOM_INTS)_sparse_500MiB.in \
 		 $(RANDOM_INTS)_empty_500MiB.in \
-		 $(TOKENS)_500MiB.in
+		 $(TOKENS)_dense_500MiB.in \
+		 $(TOKENS)_moderate_500MiB.in \
+		 $(TOKENS)_sparse_500MiB.in
 
 .PHONY: clean
 
@@ -34,8 +36,14 @@ $(RANDOM_INTS)_empty_500MiB.in: $(RANDOM_INTS)
 $(TOKENS): $(TOKENS).c
 	$(CC) $(CFLAGS) -o $(TOKENS) $<
 
-$(TOKENS)_500MiB.in: $(TOKENS)
-	./$< 524288000 > $@ 
+$(TOKENS)_dense_500MiB.in: $(TOKENS)
+	./$< 524288000 0:10 > $@ 
+
+$(TOKENS)_moderate_500MiB.in: $(TOKENS)
+	./$< 524288000 100:110 > $@ 
+
+$(TOKENS)_sparse_500MiB.in: $(TOKENS)
+	./$< 524288000 1000:1010 > $@ 
 
 clean:
 	rm -f $(RANDOM_INTS) $(RANDOM_INTS)_*.in $(TOKENS) $(TOKENS)_*.in

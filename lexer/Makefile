@@ -11,7 +11,13 @@ default: bench
 
 .PHONY: clean bench
 
-tokens_500MiB.in:
+$(DATA_PATH)/tokens_dense_500MiB.in:
+	(cd $(DATA_PATH) && make)
+
+$(DATA_PATH)/tokens_moderate_500MiB.in:
+	(cd $(DATA_PATH) && make)
+
+$(DATA_PATH)/tokens_sparse_500MiB.in:
 	(cd $(DATA_PATH) && make)
 
 $(FUTHARK_PROGRAM): $(FUTHARK_PATH)/$(FUTHARK_PROGRAM).fut
@@ -20,9 +26,15 @@ $(FUTHARK_PROGRAM): $(FUTHARK_PATH)/$(FUTHARK_PROGRAM).fut
 $(CUDA_PROGRAM): $(CUDA_PATH)/$(CUDA_PROGRAM).cu $(COMMON_PATH)/sps.cu.h $(COMMON_PATH)/util.cu.h $(COMMON_PATH)/data.h
 	$(COMPILER) $(FLAGS) -o $@ $<
 
-bench: $(FUTHARK_PROGRAM) $(CUDA_PROGRAM) tokens_500MiB.in
+bench: $(DATA_PATH)/tokens_dense_500MiB.in \
+	   $(DATA_PATH)/tokens_moderate_500MiB.in \
+	   $(DATA_PATH)/tokens_sparse_500MiB.in \
+	   $(FUTHARK_PROGRAM) \
+	   $(CUDA_PROGRAM)
 	futhark bench $(FUTHARK_PATH)/$(FUTHARK_PROGRAM).fut --backend=cuda
-	./$(CUDA_PROGRAM) $(DATA_PATH)/tokens_500MiB.in
+	./$(CUDA_PROGRAM) $(DATA_PATH)/tokens_dense_500MiB.in
+	./$(CUDA_PROGRAM) $(DATA_PATH)/tokens_moderate_500MiB.in
+	./$(CUDA_PROGRAM) $(DATA_PATH)/tokens_sparse_500MiB.in
 
 clean:
 	rm -rf $(CUDA_PROGRAM) $(FUTHARK_PROGRAM) *.c *.out $(FUTHARK_PATH)/*.c $(FUTHARK_PATH)/$(FUTHARK_PROGRAM)

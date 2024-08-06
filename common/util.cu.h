@@ -31,7 +31,7 @@ void compute_descriptors(timeval* measurements, size_t size, size_t bytes) {
 
     printf("Average time: %.0lfμs", sample_mean);
     printf(" (95%% CI: [%.0lfμs, %.0lfμs])\n", sample_mean - bound, sample_mean + bound);
-    printf("Measured througput: %.0lfGB/s\n", sample_gbps);
+    printf("Memory Bandwidth Usage: %.0lfGB/s\n", sample_gbps);
 }
 
 int gpuAssert(cudaError_t code) {
