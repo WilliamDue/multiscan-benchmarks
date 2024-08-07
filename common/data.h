@@ -9,6 +9,11 @@ union i32 {
   char str[sizeof(int32_t)];
 };
 
+union u32 {
+  uint32_t i;
+  char str[sizeof(uint32_t)];
+};
+
 union u64 {
   uint64_t i;
   char str[sizeof(uint64_t)];
@@ -116,7 +121,7 @@ void read_i32_bool_array(const char* filename,
   
   union u64 union_vals_size;
 
-  for (uint8_t i = 0; i < sizeof(uint64_t); i++) {
+  for (size_t i = 0; i < sizeof(uint64_t); i++) {
     union_vals_size.str[i] = buffer_ptr[i];
   }
 
@@ -139,7 +144,7 @@ void read_i32_bool_array(const char* filename,
   
   union u64 union_flags_size;
 
-  for (uint8_t i = 0; i < sizeof(uint64_t); i++) {
+  for (size_t i = 0; i < sizeof(uint64_t); i++) {
     union_flags_size.str[i] = buffer_ptr[i];
   }
 
@@ -149,6 +154,66 @@ void read_i32_bool_array(const char* filename,
   *flags = (bool*) malloc(flags_bytes);
   assert(*flags != NULL);
   memcpy(*flags, buffer_ptr, flags_bytes);
+
+  free(buffer);
+}
+
+void read_tuple_u32_u8_array(const char* filename,
+                             uint32_t** indices,
+                             size_t* indices_size,
+                             uint8_t** tokens,
+                             size_t* tokens_size) {
+  assert(*indices == NULL);
+  assert(*tokens == NULL);
+  size_t file_size;
+  uint8_t* buffer = read_file(filename, &file_size);
+  assert(buffer != NULL);
+  uint8_t* buffer_ptr = buffer;
+  uint8_t fst_header[7] = {'b', 2, 1, ' ', 'u', '3', '2'};
+
+  for (size_t i = 0; i < sizeof(fst_header); i++) {
+    assert(buffer_ptr[i] == fst_header[i]);
+  }
+  buffer_ptr += sizeof(fst_header);
+  
+  union u64 union_indices_size;
+
+  for (size_t i = 0; i < sizeof(uint64_t); i++) {
+    union_indices_size.str[i] = buffer_ptr[i];
+  }
+
+
+  buffer_ptr += sizeof(uint64_t);
+  *indices_size = union_indices_size.i;
+  size_t indices_bytes = union_indices_size.i * sizeof(uint32_t);
+  *indices = (uint32_t*) malloc(indices_bytes);
+
+  assert(*indices != NULL);
+  memcpy(*indices, buffer_ptr, indices_bytes);
+  buffer_ptr += indices_bytes;
+
+  assert(*buffer_ptr == '\n');
+  buffer_ptr++;
+  uint8_t snd_header[7] = {'b', 2, 1, ' ', ' ', 'u', '8'};
+
+  for (size_t i = 0; i < sizeof(snd_header); i++) {
+    assert(buffer_ptr[i] == snd_header[i]); // printf("%lu\n", buffer_ptr[i]);
+  }
+
+  buffer_ptr += sizeof(snd_header);
+  
+  union u64 union_tokens_size;
+
+  for (size_t i = 0; i < sizeof(uint64_t); i++) {
+    union_tokens_size.str[i] = buffer_ptr[i];
+  }
+
+  buffer_ptr += sizeof(uint64_t);
+  *tokens_size = union_tokens_size.i;
+  size_t tokens_bytes = union_tokens_size.i * sizeof(uint8_t);
+  *tokens = (uint8_t*) malloc(tokens_bytes);
+  assert(*tokens != NULL);
+  memcpy(*tokens, buffer_ptr, tokens_bytes);
 
   free(buffer);
 }

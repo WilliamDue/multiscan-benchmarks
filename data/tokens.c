@@ -1,6 +1,8 @@
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include "../common/data.h"
+#include <stdint.h>
 
 void random_letter() {
   int i = rand() % 60;
@@ -18,32 +20,6 @@ void random_whitespace() {
   putchar(whitespace[rand()%sizeof(whitespace)]);
 }
 
-int random_token( unsigned short lowerbound,  unsigned short upperbound) {
-  int i = rand() % 4;
-  switch (i) {
-  case 0:
-    {
-      int count = lowerbound + rand() % upperbound;
-      for (int j = 0; j < count; j++) { random_letter(); }
-      return count;
-    }
-    break;
-  case 1:
-    {
-      int count = 3 + rand() % 6;
-      for (int j = 0; j < count; j++) { random_whitespace(); }
-      return count;
-    }
-  case 2:
-    putchar('(');
-    break;
-  case 3:
-    putchar(')');
-    break;
-  }
-  return 0;
-}
-
 int main(int argc, char *argv[]) {
   assert(argc == 3);
   unsigned long max_size = 0;
@@ -52,7 +28,43 @@ int main(int argc, char *argv[]) {
   unsigned short upperbound = 0;
   sscanf(argv[2], "%hu:%hu", &lowerbound, &upperbound);
   unsigned long curr_size = 0;
+
+  uint8_t header[7] = {'b', 2U, 1U, ' ', ' ', 'u', '8'};
+  for (size_t i = 0; i < 7; i++) {
+    putchar(header[i]);
+  }
+
+  putu64(max_size);
+
   while (curr_size < max_size) {
-    curr_size += random_token(lowerbound, upperbound);
+    int i = rand() % 4;
+    switch (i) {
+    case 0:
+      {
+        int count = lowerbound + rand() % upperbound;
+        for (int j = 0; j < count && curr_size < max_size; j++) {
+          random_letter();
+          curr_size += 1;
+        }
+      }
+      break;
+    case 1:
+      {
+        int count = 3 + rand() % 6;
+        for (int j = 0; j < count && curr_size < max_size; j++) {
+          random_whitespace();
+          curr_size += 1;
+        }
+        break;
+      }
+    case 2:
+      putchar('(');
+      curr_size += 1;
+      break;
+    case 3:
+      putchar(')');
+      curr_size += 1;
+      break;
+    }
   }
 }

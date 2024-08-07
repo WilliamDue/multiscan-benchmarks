@@ -66,25 +66,23 @@ module mk_lexer(L: lexer_context) = {
     
   def lex_with_dead [n'] (offset: i32)
                          (str: [n']u8):
-                         [](terminal, (i32, i32)) =
+                         [](u32, terminal) =
     let n = i32.i64 n'
     let endos = traverse str
     let is = filter (\i -> i == 0 || is_produce endos[i]) (0i32..<n)
     let new_size = length is
     in tabulate new_size (
                   \i ->
-                    let start = is[i]
                     let end = if i == new_size - 1 then n else is[i + 1]
-                    let span = (offset + start, offset + end)
                     let endo = endos[end - 1]
-                    in (to_terminal endo, span)
+                    in (u32.i32 (offset + end - 1), to_terminal endo)
                 )
     
-  def lex [n'] (str: [n']u8): opt ([](terminal, (i32, i32))) =
+  def lex [n'] (str: [n']u8): opt ([](u32, terminal)) =
     let result = lex_with_dead 0 str
     let is_valid =
       length result == 0 ||
-      (last result).0 L.terminal_module.!= L.dead_terminal
+      (last result).1 L.terminal_module.!= L.dead_terminal
     in if is_valid
        then some result
        else #none
@@ -93,7 +91,7 @@ module mk_lexer(L: lexer_context) = {
 -- End of lexer.fut
 
 module lexer = mk_lexer {
-  module terminal_module = i8
+  module terminal_module = u8
   module endomorphism_module = u16
 
   type endomorphism = endomorphism_module.t
@@ -384,13 +382,15 @@ module lexer = mk_lexer {
 }
 
 -- ==
--- entry: lex
--- script input { $loadbytes "../../data/tokens_dense_500MiB.in" }
--- script input { $loadbytes "../../data/tokens_moderate_500MiB.in" }
--- script input { $loadbytes "../../data/tokens_sparse_500MiB.in" }
-entry lex s =
+-- input @ ../../data/tokens_dense_500MiB.in
+-- input @ ../../data/tokens_moderate_500MiB.in
+-- input @ ../../data/tokens_sparse_500MiB.in
+entry main (s : []u8) : ([]u32, []u8) =
   match lexer.lex s
-  case #some r ->
-    map (\(a, (b, c)) -> [i32.i8 a, b, c]) r
-  case #none -> []
+  case #some r -> unzip r
+  case #none -> ([], [])
 
+entry test (s : []u8) : i64 =
+  match lexer.lex s
+  case #some r -> length r
+  case #none -> 0

@@ -14,27 +14,27 @@ default: bench
 randomints_sparse_500MiB.in: $(FUTHARK_PROGRAM)
 	(cd $(DATA_PATH) && make)
 	cp $(DATA_PATH)/randomints_sparse_500MiB.in .
-	cat $@ | ./$< -e flags -b >> $@
+	cat $(DATA_PATH)/randomints_sparse_500MiB.in | ./$< -e flags -b >> $@
 
 randomints_dense_500MiB.in: $(FUTHARK_PROGRAM)
 	(cd $(DATA_PATH) && make)
 	cp $(DATA_PATH)/randomints_dense_500MiB.in .
-	cat $@ | ./$< -e flags -b >> $@
+	cat $(DATA_PATH)/randomints_sparse_500MiB.in | ./$< -e flags -b >> $@
 
 randomints_moderate_500MiB.in: $(FUTHARK_PROGRAM)
 	(cd $(DATA_PATH) && make)
 	cp $(DATA_PATH)/randomints_moderate_500MiB.in .
-	cat $@ | ./$< -e flags -b >> $@
+	cat $(DATA_PATH)/randomints_sparse_500MiB.in | ./$< -e flags -b >> $@
 
 randomints_empty_500MiB.in: $(FUTHARK_PROGRAM)
 	(cd $(DATA_PATH) && make)
 	cp $(DATA_PATH)/randomints_empty_500MiB.in .
-	cat $@ | ./$< -e flags -b >> $@
+	cat $(DATA_PATH)/randomints_sparse_500MiB.in | ./$< -e flags -b >> $@
 
 randomints_full_500MiB.in: $(FUTHARK_PROGRAM)
 	(cd $(DATA_PATH) && make)
 	cp $(DATA_PATH)/randomints_full_500MiB.in .
-	cat $@ | ./$< -e flags -b >> $@
+	cat $(DATA_PATH)/randomints_sparse_500MiB.in | ./$< -e flags -b >> $@
 
 $(FUTHARK_PROGRAM): $(FUTHARK_PATH)/$(FUTHARK_PROGRAM).fut
 	(cd $(FUTHARK_PATH) && futhark pkg sync)

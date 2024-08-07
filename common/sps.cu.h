@@ -271,7 +271,6 @@ decoupledLookbackScan(volatile State<T>* states,
     }
 
     __syncthreads();
-    prefix = shmem_prefix;
 
     if (is_first) {
         states[dyn_idx].prefix = op(prefix, aggregate);
@@ -279,6 +278,7 @@ decoupledLookbackScan(volatile State<T>* states,
         states[dyn_idx].status = Prefix;
     }
     
+    prefix = shmem_prefix;
     const I offset = threadIdx.x * ITEMS_PER_THREAD;
     const I upper = offset + ITEMS_PER_THREAD;
     #pragma unroll
