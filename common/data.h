@@ -217,3 +217,33 @@ void read_tuple_u32_u8_array(const char* filename,
 
   free(buffer);
 }
+
+uint8_t* read_u8_file(const char* filename, size_t* size) {
+  size_t file_size;
+  uint8_t* buffer = read_file(filename, &file_size);
+  assert(buffer != NULL);
+  uint8_t* buffer_ptr = buffer;
+  uint8_t fst_header[7] = {'b', 2, 1, ' ', ' ', 'u', '8'};
+
+  for (size_t i = 0; i < sizeof(fst_header); i++) {
+    assert(buffer_ptr[i] == fst_header[i]);
+  }
+  buffer_ptr += sizeof(fst_header);
+  
+  union u64 union_indices_size;
+
+  for (size_t i = 0; i < sizeof(uint64_t); i++) {
+    union_indices_size.str[i] = buffer_ptr[i];
+  }
+
+
+  buffer_ptr += sizeof(uint64_t);
+  *size = union_indices_size.i;
+  size_t bytes = union_indices_size.i * sizeof(uint8_t);
+  uint8_t *result = (uint8_t*) malloc(bytes);
+
+  assert(result != NULL);
+  memcpy(result, buffer_ptr, bytes);
+  free(buffer);
+  return result;
+}

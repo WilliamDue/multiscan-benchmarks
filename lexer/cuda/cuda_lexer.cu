@@ -181,7 +181,6 @@ decoupledLookbackScanSuffix(volatile State<T>* states,
     }
 
     __syncthreads();
-    
     prefix = shmem_prefix;
     const I offset = threadIdx.x * ITEMS_PER_THREAD;
     const I upper = offset + ITEMS_PER_THREAD;
@@ -274,7 +273,7 @@ lexer(LexerCtx *ctx,
             d_token_out[offset] = get_token(states[lid]);
         }
     }
-    
+    __syncthreads();
     if (dyn_index == num_logical_blocks - 1 && threadIdx.x == blockDim.x - 1) {
         *new_size = indices[ITEMS_PER_THREAD * BLOCK_SIZE - 1];
         *is_valid = is_accept(states[ITEMS_PER_THREAD * BLOCK_SIZE - 1]);
@@ -328,7 +327,7 @@ void testLexer(uint8_t* input,
     gpuAssert(cudaMemcpy(d_in, input, IN_ARRAY_BYTES, cudaMemcpyHostToDevice));
     
     LexerCtx ctx = LexerCtx();
-    
+
     for (I i = 0; i < WARMUP_RUNS; ++i) {
         lexer<I, BLOCK_SIZE, ITEMS_PER_THREAD><<<NUM_LOGICAL_BLOCKS, BLOCK_SIZE>>>(
             &ctx,
@@ -376,7 +375,6 @@ void testLexer(uint8_t* input,
         timeval_subtract(&t_diff, &curr, &prev);
         temp[i] = t_diff;
         cudaMemset(d_dyn_index_ptr, 0, sizeof(uint32_t));
-        cudaMemset(d_new_size, 0, sizeof(I));
         gpuAssert(cudaPeekAtLastError());
     }
 
@@ -388,7 +386,7 @@ void testLexer(uint8_t* input,
     const I SCAN_READ =  sizeof(state_t) * (size + size / 2); // Lowerbound, it does more work.
     compute_descriptors(temp, RUNS, IN_READ + IN_STATE_MAP + SCAN_READ + OUT_WRITE);
     free(temp);
-
+    
     lexer<I, BLOCK_SIZE, ITEMS_PER_THREAD><<<NUM_LOGICAL_BLOCKS, BLOCK_SIZE>>>(
         &ctx,
         d_in,
@@ -413,26 +411,27 @@ void testLexer(uint8_t* input,
     bool test_passes = is_valid;
 
     if (!test_passes) {
-        std::cout << "The input given to the lexer does not result in an accepting state." << std::endl;
-    }    
-    /*
-    bool test_passes = temp_size == expected_size;
+        std::cout << "Lexer Test Failed: The input given to the lexer does not result in an accepting state." << std::endl;
+    }
+
+    test_passes = temp_size == expected_size;
     if (!test_passes) {
-        std::cout << "Filter Test Failed: Expected size=" << expected_size << " but got size=" << temp_size << std::endl;
+        std::cout << "Lexer Test Failed: Expected size=" << expected_size << " but got size=" << temp_size << std::endl;
     } else {
         for (I i = 0; i < expected_size; ++i) {
-            test_passes &= h_out[i] == expected[i];
+            test_passes &= h_index_out[i] == expected_indices[i];
+            test_passes &= h_token_out[i] == expected_tokens[i];
 
             if (!test_passes) {
-                std::cout << "Filter Test Failed: Due to elements mismatch at index=" << i << std::endl;
+                std::cout << "Lexer Test Failed: Due to elements mismatch at index=" << i << std::endl;
+                break;
             }
         } 
     }
 
     if (test_passes) {
-        std::cout << "Filter test passed." << std::endl;
+        std::cout << "Lexer test passed." << std::endl;
     }
-    */
     
 
     gpuAssert(cudaFree(d_in));
@@ -449,10 +448,8 @@ void testLexer(uint8_t* input,
 
 int main(int32_t argc, char *argv[]) {
     assert(argc == 3);
-    
     size_t input_size;
-    uint8_t* input = read_file(argv[1], &input_size);
-
+    uint8_t* input = read_u8_file(argv[1], &input_size);
     uint32_t* expected_indices = NULL;
     size_t expected_indices_size = 0;
     uint8_t* expected_tokens = NULL;
@@ -463,6 +460,13 @@ int main(int32_t argc, char *argv[]) {
                             &expected_tokens,
                             &expected_tokens_size);
     assert(expected_indices_size == expected_tokens_size);
+    /*
+    size_t input_size = 14;
+    uint8_t input[14] = {'t', 'e', 's', 't', ' ', 't', 'e', 's', 't', ' ', 't', 'e', 's', 't'};
+    uint32_t expected_indices[5] = {4, 5, 9, 10, 14};
+    uint8_t expected_tokens[5] = {1, 0, 1, 0, 1};
+    size_t expected_indices_size = 5;
+    */
     testLexer(input, input_size, expected_indices, expected_tokens, expected_indices_size);
 
     free(input);

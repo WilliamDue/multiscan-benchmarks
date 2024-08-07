@@ -1,6 +1,6 @@
 default: bench
 
-.PHONY: clean
+.PHONY: clean bench
 
 clean:
 	cd common && make clean
@@ -10,3 +10,9 @@ clean:
 	cd segreduce && make clean
 	cd lexer && make clean
 	
+bench:
+	cd common && make
+	cd filter && make
+	cd partition && make
+	cd segreduce && make
+	cd lexer && make
