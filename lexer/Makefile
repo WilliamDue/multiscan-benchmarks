@@ -44,10 +44,17 @@ bench: $(DATA_PATH)/tokens_dense_500MiB.in \
 	   tokens_sparse_500MiB.out \
 	   $(FUTHARK_PROGRAM) \
 	   $(CUDA_PROGRAM)
+	@echo ""
+	@echo "Futhark:"
 	futhark bench $(FUTHARK_PATH)/$(FUTHARK_PROGRAM).fut --backend=cuda
+	@echo ""
+	@echo "Cuda:"
 	./$(CUDA_PROGRAM) $(DATA_PATH)/tokens_dense_500MiB.in tokens_dense_500MiB.out
+	@echo ""
 	./$(CUDA_PROGRAM) $(DATA_PATH)/tokens_moderate_500MiB.in tokens_moderate_500MiB.out
+	@echo ""
 	./$(CUDA_PROGRAM) $(DATA_PATH)/tokens_sparse_500MiB.in tokens_sparse_500MiB.out
+	@echo ""
 
 clean:
 	rm -rf $(CUDA_PROGRAM) $(FUTHARK_PROGRAM) *.c *.in *.out $(FUTHARK_PATH)/*.c $(FUTHARK_PATH)/$(FUTHARK_PROGRAM)

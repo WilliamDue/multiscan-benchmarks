@@ -145,19 +145,19 @@ void testFilter(int32_t* input, size_t input_size, int32_t* expected, size_t exp
     
     bool test_passes = temp_size == expected_size;
     if (!test_passes) {
-        std::cout << "Filter Test Failed: Expected size=" << expected_size << " but got size=" << temp_size << std::endl;
+        std::cout << "Filter Test Failed: Expected size=" << expected_size << " but got size=" << temp_size << "\n";
     } else {
         for (I i = 0; i < expected_size; ++i) {
             test_passes &= h_out[i] == expected[i];
 
             if (!test_passes) {
-                std::cout << "Filter Test Failed: Due to elements mismatch at index=" << i << std::endl;
+                std::cout << "Filter Test Failed: Due to elements mismatch at index=" << i << "\n";
             }
         } 
     }
 
     if (test_passes) {
-        std::cout << "Filter test passed." << std::endl;
+        std::cout << "Filter test passed." << "\n";
     }
 
     gpuAssert(cudaFree(d_in));
@@ -176,6 +176,8 @@ int main(int32_t argc, char *argv[]) {
     testFilter(input, input_size, expected, expected_size);
     free(input);
     free(expected);
+
+    std::cout << std::flush;
 
     gpuAssert(cudaPeekAtLastError());
     return 0;

@@ -68,9 +68,9 @@ void testBlocks(I size) {
     }
 
     if (test_passes) {
-        std::cout << "Block Scan Test Passed using size=" << size << std::endl;
+        std::cout << "Block Addition Scan Test Passed using " << size << " int32.\n";
     } else {
-        std::cout << "Block Scan Test Failed using size=" << size << std::endl;
+        std::cout << "Block Addition Scan Test Failed using " << size << " int32.\n";
     }
 
     gpuAssert(cudaFree(d_in));
@@ -115,7 +115,7 @@ void benchMemcpy(size_t size) {
     }
 
     timeval * temp = (timeval *) malloc(sizeof(timeval) * RUNS);
-    timeval prev;
+    timeval prev; 
     timeval curr;
     timeval t_diff;
 
@@ -127,7 +127,7 @@ void benchMemcpy(size_t size) {
         timeval_subtract(&t_diff, &curr, &prev);
         temp[i] = t_diff;
     }
-
+ 
     compute_descriptors(temp, RUNS, 2 * ARRAY_BYTES);
     free(temp);
     gpuAssert(cudaFree(d_in));
@@ -144,6 +144,8 @@ void testScan(I size) {
     const I WARMUP_RUNS = 1000;
     const I RUNS = 10;
 
+     std::cout << "Testing and Benching Addition Scan using " << size << " int32.\n";
+
     std::vector<int> h_in(size);
     std::vector<int> h_out(size, 0);
 
@@ -154,7 +156,7 @@ void testScan(I size) {
     uint32_t* d_dyn_idx_ptr;
     int *d_in, *d_out;
     State<int>* d_states;
-    gpuAssert(cudaMalloc((void**)&d_dyn_idx_ptr, sizeof(uint32_t)));
+    gpuAssert(cudaMalloc( (void**)&d_dyn_idx_ptr, sizeof(uint32_t)));
     cudaMemset(d_dyn_idx_ptr, 0, sizeof(uint32_t));
     gpuAssert(cudaMalloc((void**)&d_states, STATES_BYTES));
     gpuAssert(cudaMalloc((void**)&d_in, ARRAY_BYTES));
@@ -203,9 +205,9 @@ void testScan(I size) {
     }
 
     if (test_passes) {
-        std::cout << "Scan Test Passed using size=" << size << std::endl;
+        std::cout << "Scan Test Passed.\n";
     } else {
-        std::cout << "Scan Test Failed using size=" << size << std::endl;
+        std::cout << "Scan Test Failed.\n";
     }
 
     gpuAssert(cudaFree(d_in));
@@ -217,6 +219,7 @@ void testScan(I size) {
 int main() {
     info();
     
+    std::cout << "\nTesting Block Wide Scan:\n";
     testBlocks<uint32_t>(1 << 6);
     testBlocks<uint32_t>(1 << 16);
     testBlocks<uint32_t>(1 << 26);
@@ -225,10 +228,8 @@ int main() {
     testBlocks<uint32_t>(100000);
     testBlocks<uint32_t>(10000000);
     std::cout << "\n";
-
-    benchMemcpy(100000000);
-    std::cout << "\n";
     
+    std::cout << "Testing and Benching Device Wide Single Pass Scan:";
     testScan<uint32_t>(1 << 8);
     std::cout << "\n";
     testScan<uint32_t>(1 << 16);
@@ -241,7 +242,11 @@ int main() {
     testScan<uint32_t>(100000);
     std::cout << "\n";
     testScan<uint32_t>(100000000);
-    std::cout << "\n" << "500MiB:\n";
+    std::cout << "\n";
+
+    std::cout << "Testing and Benching cudaMemcpy using device to device on 500MiB of int32:\n";
+    benchMemcpy(131072000);
+    std::cout << "\nTesting and Benching Scan on 500MiB of int32: \n";
     testScan<uint32_t>(131072000);
     std::cout << std::flush;
 

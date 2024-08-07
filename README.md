@@ -1,6 +1,13 @@
 # Multiscan Benchmarks
 This repository will explore performance differences in Futhark  and CUDA in respect to Multiscan.
 
+## Running The Benchmarks
+
+To run the benchmarks you need to have Futhark, CUDA and CUB.
+All benchmarks can be ran from the root folder using `make`.
+To run individual benchmarks navigate into a folder and run `make`.
+To clean up files created use `make clean` in the same manner as `make`.
+
 ## Multiscan
 The Single-Pass scan [^1] allows for the fusion of multiple  map-scans ending in a single map-reduce or map-scatter. This construct will be refered to as a Multiscan.
 
