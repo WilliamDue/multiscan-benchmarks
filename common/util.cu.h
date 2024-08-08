@@ -2,6 +2,7 @@
 #include <sys/time.h>
 #include <assert.h>
 #include <cuda_runtime.h>
+#define gpuAssert(x) _gpuAssert(x, __FILE__, __LINE__)
 
 int timeval_subtract(struct timeval *result, struct timeval *t2, struct timeval *t1) {
     unsigned int resolution = 1000000;
@@ -34,9 +35,9 @@ void compute_descriptors(timeval* measurements, size_t size, size_t bytes) {
     printf("Memory Bandwidth Usage: %.0lfGB/s\n", sample_gbps);
 }
 
-int gpuAssert(cudaError_t code) {
+int _gpuAssert(cudaError_t code, const char *fname, int lineno) {
     if(code != cudaSuccess) {
-        printf("GPU Error: %s\n", cudaGetErrorString(code));
+        printf("GPU Error: %s, File: %s, line: %i\n", cudaGetErrorString(code), fname, lineno);
         fflush(stdout);
         return -1;
     }
