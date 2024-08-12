@@ -137,15 +137,19 @@ lexer(LexerCtx ctx,
 
     uint32_t dyn_index = dynamicIndex<uint32_t>(dyn_index_ptr);
     I glb_offs = dyn_index * BLOCK_SIZE * ITEMS_PER_THREAD;
+
+    states_aux[threadIdx.x] = ctx.to_state(threadIdx.x);
+
+    __syncthreads();
    
     #pragma unroll
     for (I i = 0; i < ITEMS_PER_THREAD; i++) {
         I lid = i * blockDim.x + threadIdx.x;
         I gid = glb_offs + lid;
 	    if (gid < size) {
-            states[lid] = ctx.to_state(d_in[gid]);
+            states[lid] = states_aux[d_in[gid]];
             if (lid == ITEMS_PER_THREAD * BLOCK_SIZE - 1) {
-                last_thread_lookahead = ctx.to_state(d_in[gid + 1]);
+                last_thread_lookahead = states_aux[d_in[gid + 1]];
             }
         } else {
             states[lid] = IDENTITY;
