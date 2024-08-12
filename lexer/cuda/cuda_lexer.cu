@@ -75,21 +75,21 @@ __device__ __host__ __forceinline__ bool is_produce(state_t state) {
 }
 
 struct LexerCtx {
-    volatile state_t* d_to_state;
-    volatile state_t* d_compose;
+    state_t* d_to_state;
+    state_t* d_compose;
 
     LexerCtx() : d_to_state(NULL), d_compose(NULL) {
         cudaMalloc(&d_to_state, sizeof(h_to_state));
-        cudaMemcpy(const_cast<state_t*>(d_to_state), h_to_state, sizeof(h_to_state),
+        cudaMemcpy(d_to_state, h_to_state, sizeof(h_to_state),
                 cudaMemcpyHostToDevice);
         cudaMalloc(&d_compose, sizeof(h_compose));
-        cudaMemcpy(const_cast<state_t*>(d_compose), h_compose, sizeof(h_compose),
+        cudaMemcpy(d_compose, h_compose, sizeof(h_compose),
                 cudaMemcpyHostToDevice);
     }
 
     void Cleanup() {
-        if (d_to_state) cudaFree(const_cast<state_t*>(d_to_state));
-        if (d_compose) cudaFree(const_cast<state_t*>(d_compose));
+        if (d_to_state) cudaFree(d_to_state);
+        if (d_compose) cudaFree(d_compose);
     }
 
     __device__ __host__ __forceinline__
@@ -131,7 +131,10 @@ decoupledLookbackScanSuffix(volatile State<T>* states,
 
     T aggregate = shmem[ITEMS_PER_THREAD * blockDim.x - 1];
 
-    states[dyn_idx].aggregate = aggregate;
+    if (is_first) {
+        states[dyn_idx].aggregate = aggregate;
+        suffixes[dyn_idx] = shmem[0];
+    }
     
     if (dyn_idx == 0 && is_first) {
         states[dyn_idx].prefix = aggregate;

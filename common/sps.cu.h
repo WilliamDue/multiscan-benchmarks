@@ -221,7 +221,9 @@ decoupledLookbackScan(volatile State<T>* states,
 
     T aggregate = shmem[ITEMS_PER_THREAD * blockDim.x - 1];
 
-    states[dyn_idx].aggregate = aggregate;
+    if (is_first) {
+        states[dyn_idx].aggregate = aggregate;
+    }
     
     if (dyn_idx == 0 && is_first) {
         states[dyn_idx].prefix = aggregate;
