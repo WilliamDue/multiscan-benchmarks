@@ -210,7 +210,6 @@ void testLexer(uint8_t* input,
     const I TOKEN_OUT_ARRAY_BYTES = size * sizeof(token_t);
     const I STATE_STATES_BYTES = NUM_LOGICAL_BLOCKS * sizeof(State<state_t>);
     const I INDEX_STATES_BYTES = NUM_LOGICAL_BLOCKS * sizeof(State<I>);
-    const I SUFFIXES_BYTES = NUM_LOGICAL_BLOCKS * sizeof(state_t);
     const I WARMUP_RUNS = 500;
     const I RUNS = 50;
 
@@ -257,7 +256,6 @@ void testLexer(uint8_t* input,
         cudaMemset(d_dyn_index_ptr, 0, sizeof(uint32_t));
         gpuAssert(cudaPeekAtLastError());
     }
-
 
     timeval * temp = (timeval *) malloc(sizeof(timeval) * RUNS);
     timeval prev;
