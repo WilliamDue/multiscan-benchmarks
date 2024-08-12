@@ -115,93 +115,6 @@ struct Add {
     }
 };
 
-template<typename T, typename I, typename OP, I ITEMS_PER_THREAD>
-__device__ inline void
-decoupledLookbackScanSuffix(volatile State<T>* states,
-                            volatile T* suffixes,
-                            volatile T* shmem,
-                            OP op,
-                            const T ne,
-                            uint32_t dyn_idx) {
-    volatile __shared__ T values[WARP];
-    volatile __shared__ Status statuses[WARP];
-    volatile __shared__ T shmem_prefix;
-    const uint8_t lane = threadIdx.x & (WARP - 1);
-    const bool is_first = threadIdx.x == 0;
-
-    T aggregate = shmem[ITEMS_PER_THREAD * blockDim.x - 1];
-
-    if (is_first) {
-        states[dyn_idx].aggregate = aggregate;
-        suffixes[dyn_idx] = shmem[0];
-    }
-    
-    if (dyn_idx == 0 && is_first) {
-        states[dyn_idx].prefix = aggregate;
-    }
-    
-    __threadfence();
-    if (dyn_idx == 0 && is_first) {
-        states[dyn_idx].status = Prefix;
-    } else if (is_first) {
-        states[dyn_idx].status = Aggregate;
-    }
-
-    T prefix = ne;
-    if (threadIdx.x < WARP && dyn_idx != 0) {
-        I lookback_idx = threadIdx.x + dyn_idx;
-        I lookback_warp = WARP;
-        Status status = Aggregate;
-        do {
-            if (lookback_warp <= lookback_idx) {
-                I idx = lookback_idx - lookback_warp;
-                status = states[idx].status;
-                statuses[threadIdx.x] = status;
-                values[threadIdx.x] = status == Prefix ? states[idx].prefix : states[idx].aggregate;
-            } else {
-                statuses[threadIdx.x] = Aggregate;
-                values[threadIdx.x] = ne;
-            }
-
-            scanWarp<T, I, OP>(values, statuses, op, lane);
-
-            T result = values[WARP - 1];
-            status = statuses[WARP - 1];
-
-            if (status == Invalid)
-                continue;
-                
-            if (is_first) {
-                prefix = op(result, prefix);
-            }
-
-            lookback_warp += WARP;
-        } while (status != Prefix);
-    }
-
-    if (is_first) {
-        shmem_prefix = prefix;
-    }
-
-    __syncthreads();
-    prefix = shmem_prefix;
-    const I offset = threadIdx.x * ITEMS_PER_THREAD;
-    const I upper = offset + ITEMS_PER_THREAD;
-    #pragma unroll
-    for (I lid = offset; lid < upper; lid++) {
-        shmem[lid] = op(prefix, shmem[lid]);
-    }
-
-    if (is_first) {
-        suffixes[dyn_idx] = shmem[0];
-        states[dyn_idx].prefix = op(prefix, aggregate);
-        __threadfence();
-        states[dyn_idx].status = Prefix;
-    }
-
-    __syncthreads();
-}
-
 template<typename I, I BLOCK_SIZE, I ITEMS_PER_THREAD>
 __global__ void
 lexer(LexerCtx ctx,
@@ -210,7 +123,6 @@ lexer(LexerCtx ctx,
       token_t* d_token_out,
       volatile State<state_t>* state_states,
       volatile State<I>* index_states,
-      volatile state_t* suffixes, 
       I size,
       I num_logical_blocks,
       volatile uint32_t* dyn_index_ptr,
@@ -221,7 +133,7 @@ lexer(LexerCtx ctx,
     volatile __shared__ I indices[ITEMS_PER_THREAD * BLOCK_SIZE];
     volatile __shared__ I indices_aux[BLOCK_SIZE];
     bool is_produce_state[ITEMS_PER_THREAD];
-
+    state_t last_thread_lookahead = IDENTITY;
 
     uint32_t dyn_index = dynamicIndex<uint32_t>(dyn_index_ptr);
     I glb_offs = dyn_index * BLOCK_SIZE * ITEMS_PER_THREAD;
@@ -230,8 +142,11 @@ lexer(LexerCtx ctx,
     for (I i = 0; i < ITEMS_PER_THREAD; i++) {
         I lid = i * blockDim.x + threadIdx.x;
         I gid = glb_offs + lid;
-	if (gid < size) {
+	    if (gid < size) {
             states[lid] = ctx.to_state(d_in[gid]);
+            if (lid == ITEMS_PER_THREAD * BLOCK_SIZE - 1) {
+                last_thread_lookahead = ctx.to_state(d_in[gid + 1]);
+            }
         } else {
             states[lid] = IDENTITY;
         }
@@ -239,9 +154,7 @@ lexer(LexerCtx ctx,
 
     __syncthreads();
     
-    scanBlock<state_t, I, LexerCtx, ITEMS_PER_THREAD>(states, states_aux, ctx);
-    
-    decoupledLookbackScanSuffix<state_t, I, LexerCtx, ITEMS_PER_THREAD>(state_states, suffixes, states, ctx, IDENTITY, dyn_index);
+    scan<state_t, I, LexerCtx, ITEMS_PER_THREAD>(states, states_aux, state_states, ctx, IDENTITY, dyn_index);
 
     #pragma unroll
     for (I i = 0; i < ITEMS_PER_THREAD; i++) {
@@ -249,10 +162,7 @@ lexer(LexerCtx ctx,
         I gid = glb_offs + lid;
         if (gid < size) {
             if (lid == ITEMS_PER_THREAD * BLOCK_SIZE - 1) {
-                while (state_states[dyn_index + 1].status != Prefix) {
-                    continue;
-                }
-                is_produce_state[i] = gid == size - 1 || is_produce(suffixes[dyn_index + 1]);
+                is_produce_state[i] = gid == size - 1 || is_produce(ctx(states[lid], last_thread_lookahead));
             } else {
                 is_produce_state[i] = gid == size - 1 || is_produce(states[lid + 1]);
             }
@@ -276,7 +186,7 @@ lexer(LexerCtx ctx,
             d_token_out[offset] = get_token(states[lid]);
         }
     }
-    __syncthreads();
+    
     if (dyn_index == num_logical_blocks - 1 && threadIdx.x == blockDim.x - 1) {
         *new_size = indices[ITEMS_PER_THREAD * BLOCK_SIZE - 1];
         *is_valid = is_accept(states[ITEMS_PER_THREAD * BLOCK_SIZE - 1]);
@@ -314,7 +224,6 @@ void testLexer(uint8_t* input,
     I *d_index_out;
     token_t *d_token_out;
     State<I>* d_index_states;
-    state_t* d_suffixes;
     State<state_t>* d_state_states;
     gpuAssert(cudaMalloc((void**)&d_dyn_index_ptr, sizeof(uint32_t)));
     gpuAssert(cudaMalloc((void**)&d_new_size, sizeof(I)));
@@ -323,7 +232,6 @@ void testLexer(uint8_t* input,
     cudaMemset(d_is_valid, false, sizeof(bool));
     gpuAssert(cudaMalloc((void**)&d_index_states, INDEX_STATES_BYTES));
     gpuAssert(cudaMalloc((void**)&d_state_states, STATE_STATES_BYTES));
-    gpuAssert(cudaMalloc((void**)&d_suffixes, SUFFIXES_BYTES));
     gpuAssert(cudaMalloc((void**)&d_in, IN_ARRAY_BYTES));
     gpuAssert(cudaMalloc((void**)&d_index_out, INDEX_OUT_ARRAY_BYTES));
     gpuAssert(cudaMalloc((void**)&d_token_out, TOKEN_OUT_ARRAY_BYTES));
@@ -339,7 +247,6 @@ void testLexer(uint8_t* input,
             d_token_out,
             d_state_states,
             d_index_states,
-            d_suffixes,
             size,
             NUM_LOGICAL_BLOCKS,
             d_dyn_index_ptr,
@@ -366,7 +273,6 @@ void testLexer(uint8_t* input,
             d_token_out,
             d_state_states,
             d_index_states,
-            d_suffixes,
             size,
             NUM_LOGICAL_BLOCKS,
             d_dyn_index_ptr,
@@ -397,7 +303,6 @@ void testLexer(uint8_t* input,
         d_token_out,
         d_state_states,
         d_index_states,
-        d_suffixes,
         size,
         NUM_LOGICAL_BLOCKS,
         d_dyn_index_ptr,
@@ -444,7 +349,6 @@ void testLexer(uint8_t* input,
     gpuAssert(cudaFree(d_state_states));
     gpuAssert(cudaFree(d_dyn_index_ptr));
     gpuAssert(cudaFree(d_new_size));
-    gpuAssert(cudaFree(d_suffixes));
 
     ctx.Cleanup();
 }
