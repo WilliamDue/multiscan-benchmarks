@@ -204,7 +204,7 @@ decoupledLookbackScanSuffix(volatile State<T>* states,
 
 template<typename I, I BLOCK_SIZE, I ITEMS_PER_THREAD>
 __global__ void
-lexer(LexerCtx *ctx,
+lexer(LexerCtx ctx,
       uint8_t* d_in,
       uint32_t* d_index_out,
       token_t* d_token_out,
@@ -225,23 +225,23 @@ lexer(LexerCtx *ctx,
 
     uint32_t dyn_index = dynamicIndex<uint32_t>(dyn_index_ptr);
     I glb_offs = dyn_index * BLOCK_SIZE * ITEMS_PER_THREAD;
-
+   
     #pragma unroll
     for (I i = 0; i < ITEMS_PER_THREAD; i++) {
         I lid = i * blockDim.x + threadIdx.x;
         I gid = glb_offs + lid;
-        if (gid < size) {
-            states[lid] = ctx->to_state(d_in[gid]);
+	if (gid < size) {
+            states[lid] = ctx.to_state(d_in[gid]);
         } else {
             states[lid] = IDENTITY;
         }
     }
 
     __syncthreads();
-
-    scanBlock<state_t, I, LexerCtx, ITEMS_PER_THREAD>(states, states_aux, *ctx);
-
-    decoupledLookbackScanSuffix<state_t, I, LexerCtx, ITEMS_PER_THREAD>(state_states, suffixes, states, *ctx, IDENTITY, dyn_index);
+    
+    scanBlock<state_t, I, LexerCtx, ITEMS_PER_THREAD>(states, states_aux, ctx);
+    
+    decoupledLookbackScanSuffix<state_t, I, LexerCtx, ITEMS_PER_THREAD>(state_states, suffixes, states, ctx, IDENTITY, dyn_index);
 
     #pragma unroll
     for (I i = 0; i < ITEMS_PER_THREAD; i++) {
@@ -293,7 +293,7 @@ void testLexer(uint8_t* input,
     using I = uint32_t;
     const I size = input_size;
     const I BLOCK_SIZE = 256;
-    const I ITEMS_PER_THREAD = 28;
+    const I ITEMS_PER_THREAD = 30;
     const I NUM_LOGICAL_BLOCKS = (size + BLOCK_SIZE * ITEMS_PER_THREAD - 1) / (BLOCK_SIZE * ITEMS_PER_THREAD);
     const I IN_ARRAY_BYTES = size * sizeof(uint8_t);
     const I INDEX_OUT_ARRAY_BYTES = size * sizeof(I);
@@ -333,7 +333,7 @@ void testLexer(uint8_t* input,
 
     for (I i = 0; i < WARMUP_RUNS; ++i) {
         lexer<I, BLOCK_SIZE, ITEMS_PER_THREAD><<<NUM_LOGICAL_BLOCKS, BLOCK_SIZE>>>(
-            &ctx,
+            ctx,
             d_in,
             d_index_out,
             d_token_out,
@@ -360,7 +360,7 @@ void testLexer(uint8_t* input,
     for (I i = 0; i < RUNS; ++i) {
         gettimeofday(&prev, NULL);
         lexer<I, BLOCK_SIZE, ITEMS_PER_THREAD><<<NUM_LOGICAL_BLOCKS, BLOCK_SIZE>>>(
-            &ctx,
+            ctx,
             d_in,
             d_index_out,
             d_token_out,
@@ -391,7 +391,7 @@ void testLexer(uint8_t* input,
     free(temp);
     
     lexer<I, BLOCK_SIZE, ITEMS_PER_THREAD><<<NUM_LOGICAL_BLOCKS, BLOCK_SIZE>>>(
-        &ctx,
+        ctx,
         d_in,
         d_index_out,
         d_token_out,
@@ -405,6 +405,7 @@ void testLexer(uint8_t* input,
         d_is_valid
     );
     cudaDeviceSynchronize();
+    gpuAssert(cudaPeekAtLastError());
     bool is_valid = false;
     gpuAssert(cudaMemcpy(h_index_out.data(), d_index_out, INDEX_OUT_ARRAY_BYTES, cudaMemcpyDeviceToHost));
     gpuAssert(cudaMemcpy(h_token_out.data(), d_token_out, TOKEN_OUT_ARRAY_BYTES, cudaMemcpyDeviceToHost));
@@ -434,8 +435,7 @@ void testLexer(uint8_t* input,
 
     if (test_passes) {
         std::cout << "Lexer test passed." << std::endl;
-    }
-    
+    }    
 
     gpuAssert(cudaFree(d_in));
     gpuAssert(cudaFree(d_token_out));
