@@ -136,23 +136,44 @@ lexer(LexerCtx ctx,
     state_t last_thread_lookahead = IDENTITY;
 
     uint32_t dyn_index = dynamicIndex<uint32_t>(dyn_index_ptr);
+    I const COPY_ITEMS_PER_THREAD = ITEMS_PER_THREAD / sizeof(uint32_t);
     I glb_offs = dyn_index * BLOCK_SIZE * ITEMS_PER_THREAD;
+    I uint32_glb_offs = dyn_index * BLOCK_SIZE * COPY_ITEMS_PER_THREAD;
 
     states_aux[threadIdx.x] = ctx.to_state(threadIdx.x);
 
     __syncthreads();
    
     #pragma unroll
-    for (I i = 0; i < ITEMS_PER_THREAD; i++) {
-        I lid = i * blockDim.x + threadIdx.x;
+    for (I i = 0; i < COPY_ITEMS_PER_THREAD; i++) {
+        I uint32_lid = i * blockDim.x + threadIdx.x;
+        I uint32_gid = uint32_glb_offs + uint32_lid;
+        I lid = sizeof(uint32_t) * uint32_lid;
         I gid = glb_offs + lid;
-	    if (gid < size) {
-            states[lid] = states_aux[d_in[gid]];
-            if (lid == ITEMS_PER_THREAD * BLOCK_SIZE - 1) {
-                last_thread_lookahead = states_aux[d_in[gid + 1]];
+        I last_gid = gid + sizeof(uint32_t) - 1;
+        I last_lid = lid + sizeof(uint32_t) - 1;
+        if (gid + sizeof(uint32_t) < size) {
+            uint32_t temp_states = ((uint32_t*) d_in)[uint32_gid];
+            for (I j = 0; j < sizeof(uint32_t); j++) {
+                I loc_gid = gid + j;
+                I loc_lid = lid + j;
+                uint8_t c = (temp_states >> (8 * j)) & ((uint32_t) 0xFF);
+                states[loc_lid] = states_aux[c];
             }
         } else {
-            states[lid] = IDENTITY;
+            for (I j = 0; j < sizeof(uint32_t); j++) {
+                I loc_gid = gid + j;
+                I loc_lid = lid + j;
+                if (loc_gid < size) {
+                    states[loc_lid] = states_aux[d_in[loc_gid]];
+                } else {
+                    states[loc_lid] = IDENTITY;
+                }
+            }
+        }
+
+        if (last_gid < size && last_lid == ITEMS_PER_THREAD * BLOCK_SIZE - 1) {
+            last_thread_lookahead = states_aux[d_in[last_gid + 1]];
         }
     }
 
@@ -207,7 +228,8 @@ void testLexer(uint8_t* input,
     using I = uint32_t;
     const I size = input_size;
     const I BLOCK_SIZE = 256;
-    const I ITEMS_PER_THREAD = 30;
+    const I ITEMS_PER_THREAD = 28;
+    assert(ITEMS_PER_THREAD % 4 == 0);
     const I NUM_LOGICAL_BLOCKS = (size + BLOCK_SIZE * ITEMS_PER_THREAD - 1) / (BLOCK_SIZE * ITEMS_PER_THREAD);
     const I IN_ARRAY_BYTES = size * sizeof(uint8_t);
     const I INDEX_OUT_ARRAY_BYTES = size * sizeof(I);
