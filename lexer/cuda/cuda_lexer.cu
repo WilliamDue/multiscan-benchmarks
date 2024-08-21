@@ -10,7 +10,6 @@ using token_t = uint8_t;
 using state_t = uint16_t;
 
 const uint32_t NUM_STATES = 12;
-const uint32_t COMPOSE_SIZE = NUM_STATES * NUM_STATES;
 const uint32_t NUM_TRANS = 256;
 // const token_t IGNORE_TOKEN = 0;
 const state_t ENDO_MASK = 15;
@@ -76,10 +75,22 @@ __device__ __host__ __forceinline__ bool is_produce(state_t state) {
 }
 
 struct LexerCtx {
-    volatile state_t* d_to_state;
-    volatile state_t* d_compose;
+    state_t* d_to_state;
+    state_t* d_compose;
 
-    __device__ __host__ __forceinline__ LexerCtx(volatile state_t* a, volatile state_t* b) : d_to_state(a), d_compose(b) { }
+    LexerCtx() : d_to_state(NULL), d_compose(NULL) {
+        cudaMalloc(&d_to_state, sizeof(h_to_state));
+        cudaMemcpy(d_to_state, h_to_state, sizeof(h_to_state),
+                cudaMemcpyHostToDevice);
+        cudaMalloc(&d_compose, sizeof(h_compose));
+        cudaMemcpy(d_compose, h_compose, sizeof(h_compose),
+                cudaMemcpyHostToDevice);
+    }
+
+    void Cleanup() {
+        if (d_to_state) cudaFree(d_to_state);
+        if (d_compose) cudaFree(d_compose);
+    }
 
     __device__ __host__ __forceinline__
     state_t operator()(const state_t &a, const state_t &b) const {
@@ -106,8 +117,7 @@ struct Add {
 
 template<typename I, I BLOCK_SIZE, I ITEMS_PER_THREAD>
 __global__ void
-lexer(state_t* d_compose,
-      state_t* d_to_state,
+lexer(LexerCtx ctx,
       uint8_t* d_in,
       uint32_t* d_index_out,
       token_t* d_token_out,
@@ -122,19 +132,14 @@ lexer(state_t* d_compose,
     volatile __shared__ state_t states_aux[BLOCK_SIZE];
     volatile __shared__ I indices[ITEMS_PER_THREAD * BLOCK_SIZE];
     volatile __shared__ I indices_aux[BLOCK_SIZE];
-    volatile __shared__ state_t shmem_compose[NUM_STATES * NUM_STATES];
     bool is_produce_state[ITEMS_PER_THREAD];
     state_t last_thread_lookahead = IDENTITY;
 
     uint32_t dyn_index = dynamicIndex<uint32_t>(dyn_index_ptr);
     I glb_offs = dyn_index * BLOCK_SIZE * ITEMS_PER_THREAD;
 
-    states_aux[threadIdx.x] = d_to_state[threadIdx.x];
+    states_aux[threadIdx.x] = ctx.to_state(threadIdx.x);
 
-    const I items_per_thread = COMPOSE_SIZE / BLOCK_SIZE + (COMPOSE_SIZE % BLOCK_SIZE != 0);;
-    glbToShmemCpy<state_t, I, items_per_thread>(I(), COMPOSE_SIZE, IDENTITY, d_compose, shmem_compose);
-
-    LexerCtx ctx = LexerCtx(states_aux, shmem_compose);
     __syncthreads();
    
     #pragma unroll
@@ -142,15 +147,14 @@ lexer(state_t* d_compose,
         I lid = i * blockDim.x + threadIdx.x;
         I gid = glb_offs + lid;
 	    if (gid < size) {
-            states[lid] = ctx.to_state(d_in[gid]);
+            states[lid] = states_aux[d_in[gid]];
             if (lid == ITEMS_PER_THREAD * BLOCK_SIZE - 1) {
-                last_thread_lookahead = ctx.to_state(d_in[gid + 1]);
+                last_thread_lookahead = states_aux[d_in[gid + 1]];
             }
         } else {
             states[lid] = IDENTITY;
         }
     }
-
 
     __syncthreads();
     
@@ -222,8 +226,6 @@ void testLexer(uint8_t* input,
     uint8_t *d_in;
     I *d_index_out;
     token_t *d_token_out;
-    state_t *d_to_state;
-    state_t *d_compose;
     State<I>* d_index_states;
     State<state_t>* d_state_states;
     gpuAssert(cudaMalloc((void**)&d_dyn_index_ptr, sizeof(uint32_t)));
@@ -237,18 +239,12 @@ void testLexer(uint8_t* input,
     gpuAssert(cudaMalloc((void**)&d_index_out, INDEX_OUT_ARRAY_BYTES));
     gpuAssert(cudaMalloc((void**)&d_token_out, TOKEN_OUT_ARRAY_BYTES));
     gpuAssert(cudaMemcpy(d_in, input, IN_ARRAY_BYTES, cudaMemcpyHostToDevice));
-
-    cudaMalloc(&d_to_state, sizeof(h_to_state));
-    cudaMemcpy(d_to_state, h_to_state, sizeof(h_to_state),
-            cudaMemcpyHostToDevice);
-    cudaMalloc(&d_compose, sizeof(h_compose));
-    cudaMemcpy(d_compose, h_compose, sizeof(h_compose),
-            cudaMemcpyHostToDevice);
+    
+    LexerCtx ctx = LexerCtx();
 
     for (I i = 0; i < WARMUP_RUNS; ++i) {
         lexer<I, BLOCK_SIZE, ITEMS_PER_THREAD><<<NUM_LOGICAL_BLOCKS, BLOCK_SIZE>>>(
-            d_compose,
-            d_to_state,
+            ctx,
             d_in,
             d_index_out,
             d_token_out,
@@ -273,8 +269,7 @@ void testLexer(uint8_t* input,
     for (I i = 0; i < RUNS; ++i) {
         gettimeofday(&prev, NULL);
         lexer<I, BLOCK_SIZE, ITEMS_PER_THREAD><<<NUM_LOGICAL_BLOCKS, BLOCK_SIZE>>>(
-            d_compose,
-            d_to_state,
+            ctx,
             d_in,
             d_index_out,
             d_token_out,
@@ -304,8 +299,7 @@ void testLexer(uint8_t* input,
     free(temp);
     
     lexer<I, BLOCK_SIZE, ITEMS_PER_THREAD><<<NUM_LOGICAL_BLOCKS, BLOCK_SIZE>>>(
-        d_compose,
-        d_to_state,
+        ctx,
         d_in,
         d_index_out,
         d_token_out,
@@ -357,8 +351,8 @@ void testLexer(uint8_t* input,
     gpuAssert(cudaFree(d_state_states));
     gpuAssert(cudaFree(d_dyn_index_ptr));
     gpuAssert(cudaFree(d_new_size));
-    gpuAssert(cudaFree(d_to_state));
-    gpuAssert(cudaFree(d_compose));
+
+    ctx.Cleanup();
 }
 
 int main(int32_t argc, char *argv[]) {
