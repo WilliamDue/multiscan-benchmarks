@@ -119,7 +119,6 @@ scanBlock(volatile T* block,
           OP op) {
     scanThread<T, I, OP, ITEMS_PER_THREAD>(block, block_aux, op);
 
-
     scanBlock<T, I, OP>(block_aux, op);
 
     addAuxBlockScan<T, I, OP, ITEMS_PER_THREAD>(block, block_aux, op);
