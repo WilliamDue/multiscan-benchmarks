@@ -1,6 +1,7 @@
 #include <iostream>
 #include <vector>
 #include <cuda_runtime.h>
+#include <cub/cub.cuh>
 #include "../../common/sps.cu.h"
 #include "../../common/util.cu.h"
 #include "../../common/data.h"
@@ -394,8 +395,8 @@ void testFilter(int32_t* input, size_t input_size, int32_t* expected, size_t exp
 void testFilterCoalescedWrite(int32_t* input, size_t input_size, int32_t* expected, size_t expected_size) {
     using I = uint32_t;
     const I size = input_size;
-    const I BLOCK_SIZE = 256;
-    const I ITEMS_PER_THREAD = 30;
+    const I BLOCK_SIZE = 512;
+    const I ITEMS_PER_THREAD = 14;
     const I NUM_LOGICAL_BLOCKS = (size + BLOCK_SIZE * ITEMS_PER_THREAD - 1) / (BLOCK_SIZE * ITEMS_PER_THREAD);
     const I ARRAY_BYTES = size * sizeof(int32_t);
     const I STATES_BYTES = NUM_LOGICAL_BLOCKS * sizeof(State<I>);
@@ -575,6 +576,89 @@ void testFilterFewerShmemWrite(int32_t* input, size_t input_size, int32_t* expec
     gpuAssert(cudaFree(d_new_size));
 }
 
+void testFilterCUB(int32_t* input, size_t input_size, int32_t* expected, size_t expected_size) {
+    using I = uint32_t;
+    const I size = input_size;
+    const I ARRAY_BYTES = size * sizeof(int32_t);
+    const I WARMUP_RUNS = 1000;
+    const I RUNS = 1000;
+    std::vector<int32_t> h_in(size);
+    std::vector<int32_t> h_out(size, 0);
+
+    for (I i = 0; i < size; ++i) {
+        h_in[i] = input[i];
+    }
+    
+    I* d_new_size;
+    int32_t *d_in, *d_out;
+    gpuAssert(cudaMalloc((void**)&d_new_size, sizeof(I)));
+    gpuAssert(cudaMalloc((void**)&d_in, ARRAY_BYTES));
+    gpuAssert(cudaMalloc((void**)&d_out, ARRAY_BYTES));
+    
+    gpuAssert(cudaMemcpy(d_in, h_in.data(), ARRAY_BYTES, cudaMemcpyHostToDevice));
+    
+    Predicate pred = Predicate();
+
+    void *d_temp_storage = nullptr;
+    size_t temp_storage_bytes = 0;
+    cub::DeviceSelect::If(d_temp_storage, temp_storage_bytes, d_in, d_out, d_new_size, size, pred);
+
+    cudaMalloc(&d_temp_storage, temp_storage_bytes);
+    
+    for (I i = 0; i < WARMUP_RUNS; ++i) {
+        cub::DeviceSelect::If(d_temp_storage, temp_storage_bytes, d_in, d_out, d_new_size, size, pred);
+        cudaDeviceSynchronize();
+        gpuAssert(cudaPeekAtLastError());
+    }
+
+    timeval * temp = (timeval *) malloc(sizeof(timeval) * RUNS);
+    timeval prev;
+    timeval curr;
+    timeval t_diff;
+
+    for (I i = 0; i < RUNS; ++i) {
+        gettimeofday(&prev, NULL);
+        cub::DeviceSelect::If(d_temp_storage, temp_storage_bytes, d_in, d_out, d_new_size, size, pred);
+        cudaDeviceSynchronize();
+        gettimeofday(&curr, NULL);
+        timeval_subtract(&t_diff, &curr, &prev);
+        temp[i] = t_diff;
+        cudaMemset(d_new_size, 0, sizeof(I));
+        gpuAssert(cudaPeekAtLastError());
+    }
+
+    I temp_size = 0;
+    gpuAssert(cudaMemcpy(&temp_size, d_new_size, sizeof(I), cudaMemcpyDeviceToHost));
+    compute_descriptors(temp, RUNS, ARRAY_BYTES + temp_size * sizeof(int32_t));
+    free(temp);
+
+    cub::DeviceSelect::If(d_temp_storage, temp_storage_bytes, d_in, d_out, d_new_size, size, pred);
+    cudaDeviceSynchronize();
+    gpuAssert(cudaMemcpy(h_out.data(), d_out, ARRAY_BYTES, cudaMemcpyDeviceToHost));
+    gpuAssert(cudaMemcpy(&temp_size, d_new_size, sizeof(I), cudaMemcpyDeviceToHost));
+    
+    bool test_passes = temp_size == expected_size;
+    if (!test_passes) {
+        std::cout << "Filter (CUB) Test Failed: Expected size=" << expected_size << " but got size=" << temp_size << "\n";
+    } else {
+        for (I i = 0; i < expected_size; ++i) {
+            test_passes &= h_out[i] == expected[i];
+
+            if (!test_passes) {
+                std::cout << "Filter (CUB) Test Failed: Due to elements mismatch at index=" << i << "\n";
+            }
+        } 
+    }
+
+    if (test_passes) {
+        std::cout << "Filter (CUB) test passed." << "\n";
+    }
+
+    gpuAssert(cudaFree(d_in));
+    gpuAssert(cudaFree(d_out));
+    gpuAssert(cudaFree(d_new_size));
+}
+
 int main(int32_t argc, char *argv[]) {
     assert(argc == 3);
     size_t input_size;
@@ -586,6 +670,8 @@ int main(int32_t argc, char *argv[]) {
     testFilterCoalescedWrite(input, input_size, expected, expected_size);
     printf("\n");
     testFilterFewerShmemWrite(input, input_size, expected, expected_size);
+    printf("\n");
+    testFilterCUB(input, input_size, expected, expected_size);
     free(input);
     free(expected);
 
