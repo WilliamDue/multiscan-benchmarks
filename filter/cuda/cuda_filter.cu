@@ -7,7 +7,7 @@
 
 template<typename I>
 struct Add {
-    __device__ inline I operator()(I a, I b) const {
+    __device__ __forceinline__ I operator()(I a, I b) const {
         return a + b;
     }
 };
@@ -186,23 +186,21 @@ filterFewerShmemWrite(T* d_in,
     }
     __syncthreads();
 
-    Add<I> op = Add<I>();
+    scanBlock<I, I, Add<I>, ITEMS_PER_THREAD>(block, block_aux, Add<I>());
 
-    scanBlock<I, I, Add<I>, ITEMS_PER_THREAD>(block, block_aux, op);
-
-    I prefix = decoupledLookbackScanNoWrite<I, I, Add<I>, ITEMS_PER_THREAD>(states, block, op, I(), dyn_idx);
+    I prefix = decoupledLookbackScanNoWrite<I, I, Add<I>, ITEMS_PER_THREAD>(states, block, Add<I>(), I(), dyn_idx);
 
     #pragma unroll
     for (I i = 0; i < ITEMS_PER_THREAD; i++) {
         I lid = blockDim.x * i + threadIdx.x;
         I gid = glb_offs + lid;
         if (gid < size && ((bools >> i) & 1)) {
-            d_out[op(prefix, block[lid]) - 1] = elems[i];
+            d_out[Add<I>()(prefix, block[lid]) - 1] = elems[i];
         }
     }
     
     if (dyn_idx == num_logical_blocks - 1 && threadIdx.x == blockDim.x - 1) {
-        *new_size = op(prefix, block[ITEMS_PER_THREAD * BLOCK_SIZE - 1]);
+        *new_size = Add<I>()(prefix, block[ITEMS_PER_THREAD * BLOCK_SIZE - 1]);
     }
     __syncthreads();
 }
@@ -242,9 +240,7 @@ filterCoalescedWrite(T* d_in,
     }
     __syncthreads();
 
-    Add<I> op = Add<I>();
-
-    scanBlock<I, I, Add<I>, ITEMS_PER_THREAD>(block, block_aux, op);
+    scanBlock<I, I, Add<I>, ITEMS_PER_THREAD>(block, block_aux, Add<I>());
 
     #pragma unroll
     for (I i = 0; i < ITEMS_PER_THREAD; i++) {
@@ -257,7 +253,7 @@ filterCoalescedWrite(T* d_in,
     }
     __syncthreads();
 
-    I prefix = decoupledLookbackScanNoWrite<I, I, Add<I>, ITEMS_PER_THREAD>(states, block, op, I(), dyn_idx);
+    I prefix = decoupledLookbackScanNoWrite<I, I, Add<I>, ITEMS_PER_THREAD>(states, block, Add<I>(), I(), dyn_idx);
 
     T *block_cast = (T*) &block;
 
@@ -293,12 +289,12 @@ filterCoalescedWrite(T* d_in,
         I lid = blockDim.x * i + threadIdx.x;
         I gid = glb_offs + lid;
         if (lid < block_keep_size) {
-            d_out[op(prefix, block[lid]) - 1] = elems[i];
+            d_out[Add<I>()(prefix, block[lid]) - 1] = elems[i];
         }
     }
     
     if (dyn_idx == num_logical_blocks - 1 && threadIdx.x == blockDim.x - 1) {
-        *new_size = op(prefix, block[ITEMS_PER_THREAD * BLOCK_SIZE - 1]);
+        *new_size = Add<I>()(prefix, block[ITEMS_PER_THREAD * BLOCK_SIZE - 1]);
     }
     __syncthreads();
 }
