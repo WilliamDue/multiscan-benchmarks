@@ -132,7 +132,7 @@ lexer(LexerCtx ctx,
     volatile __shared__ state_t states_aux[BLOCK_SIZE];
     volatile __shared__ I indices[ITEMS_PER_THREAD * BLOCK_SIZE];
     volatile __shared__ I indices_aux[BLOCK_SIZE];
-    bool is_produce_state[ITEMS_PER_THREAD];
+    uint32_t is_produce_state = 0;
     state_t last_thread_lookahead = IDENTITY;
 
     uint32_t dyn_index = dynamicIndex<uint32_t>(dyn_index_ptr);
@@ -185,16 +185,16 @@ lexer(LexerCtx ctx,
     for (I i = 0; i < ITEMS_PER_THREAD; i++) {
         I lid = i * blockDim.x + threadIdx.x;
         I gid = glb_offs + lid;
+        bool temp = false;
         if (gid < size) {
             if (lid == ITEMS_PER_THREAD * BLOCK_SIZE - 1) {
-                is_produce_state[i] = gid == size - 1 || is_produce(ctx(states[lid], last_thread_lookahead));
+                temp = gid == size - 1 || is_produce(ctx(states[lid], last_thread_lookahead));
             } else {
-                is_produce_state[i] = gid == size - 1 || is_produce(states[lid + 1]);
+                temp = gid == size - 1 || is_produce(states[lid + 1]);
             }
-        } else {
-            is_produce_state[i] = false;
         }
-        indices[lid] = is_produce_state[i];
+        is_produce_state |= temp << i;
+        indices[lid] = temp;
     }
 
     __syncthreads();
@@ -205,7 +205,7 @@ lexer(LexerCtx ctx,
     for (I i = 0; i < ITEMS_PER_THREAD; i++) {
         I lid = blockDim.x * i + threadIdx.x;
         I gid = glb_offs + lid;
-        if (gid < size && is_produce_state[i]) {
+        if (gid < size && ((is_produce_state >> i) & 1)) {
             I offset = indices[lid] - 1;
             d_index_out[offset] = gid;
             d_token_out[offset] = get_token(states[lid]);
@@ -229,6 +229,7 @@ void testLexer(uint8_t* input,
     const I size = input_size;
     const I BLOCK_SIZE = 256;
     const I ITEMS_PER_THREAD = 28;
+    assert(ITEMS_PER_THREAD <= 32);
     assert(ITEMS_PER_THREAD % 4 == 0);
     const I NUM_LOGICAL_BLOCKS = (size + BLOCK_SIZE * ITEMS_PER_THREAD - 1) / (BLOCK_SIZE * ITEMS_PER_THREAD);
     const I IN_ARRAY_BYTES = size * sizeof(uint8_t);
