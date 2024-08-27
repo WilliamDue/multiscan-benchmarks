@@ -77,7 +77,8 @@ partition(T* d_in,
     volatile __shared__ Tuple<I> block[ITEMS_PER_THREAD * BLOCK_SIZE];
     volatile __shared__ Tuple<I> block_aux[BLOCK_SIZE];
     T elems[ITEMS_PER_THREAD];
-    bool bools[ITEMS_PER_THREAD];
+    uint32_t bools = 0;
+    I loc_offset = *offset;
 
     uint32_t dyn_idx = dynamicIndex<uint32_t>(dyn_idx_ptr);
     I glb_offs = dyn_idx * BLOCK_SIZE * ITEMS_PER_THREAD;
@@ -88,11 +89,11 @@ partition(T* d_in,
         I gid = glb_offs + lid;
         if (gid < size) {
             elems[i] = d_in[gid];
-            bools[i] = pred(elems[i]);
-            block[lid].first = bools[i];
-            block[lid].second = !bools[i];
+            bool temp = pred(elems[i]);
+            bools |= temp << i;
+            block[lid].first = temp;
+            block[lid].second = !temp;
         } else {
-            bools[i] = false;
             block[lid].first = I();
             block[lid].second = I();
         }
@@ -105,10 +106,102 @@ partition(T* d_in,
     for (I i = 0; i < ITEMS_PER_THREAD; i++) {
         I lid = blockDim.x * i + threadIdx.x;
         I gid = glb_offs + lid;
-        if (gid < size && bools[i]) {
+        if (gid < size && ((bools >> i) & 1)) {
             d_out[block[lid].first - 1] = elems[i];
-        } else if (gid < size && !bools[i]) {
-            d_out[block[lid].second + *offset - 1] = elems[i];
+        } else if (gid < size && !((bools >> i) & 1)) {
+            d_out[block[lid].second + loc_offset - 1] = elems[i];
+        }
+    }
+    
+    __syncthreads();
+}
+
+template<typename T, typename I, typename PRED, I BLOCK_SIZE, I ITEMS_PER_THREAD>
+__global__ void
+partitionCoalescedWrite(T* d_in,
+                        T* d_out,
+                        volatile State<Tuple<I>>* states,
+                        I size,
+                        I num_logical_blocks,
+                        PRED pred,
+                        volatile uint32_t* dyn_idx_ptr,
+                        volatile I* offset) {
+    volatile __shared__ Tuple<I> block[ITEMS_PER_THREAD * BLOCK_SIZE];
+    volatile __shared__ Tuple<I> block_aux[BLOCK_SIZE];
+    T elems[ITEMS_PER_THREAD];
+    uint32_t bools = 0;
+    I local_offsets[ITEMS_PER_THREAD];
+    I loc_offset = *offset;
+
+    uint32_t dyn_idx = dynamicIndex<uint32_t>(dyn_idx_ptr);
+    I glb_offs = dyn_idx * BLOCK_SIZE * ITEMS_PER_THREAD;
+
+    #pragma unroll
+    for (I i = 0; i < ITEMS_PER_THREAD; i++) {
+        I lid = i * blockDim.x + threadIdx.x;
+        I gid = glb_offs + lid;
+        if (gid < size) {
+            elems[i] = d_in[gid];
+            bool temp = pred(elems[i]);
+            bools |= temp << i;
+            block[lid].first = temp;
+            block[lid].second = !temp;
+        } else {
+            block[lid].first = I();
+            block[lid].second = I();
+        }
+    }
+    __syncthreads();
+
+    scanBlock<Tuple<I>, I, AddTuple<I>, ITEMS_PER_THREAD>(block, block_aux, AddTuple<I>());
+
+    #pragma unroll
+    for (I i = 0; i < ITEMS_PER_THREAD; i++) {
+        I lid = blockDim.x * i + threadIdx.x;
+        if (((bools >> i) & 1)) {
+            local_offsets[i] = block[lid].first - 1;
+        } else if (!((bools >> i) & 1)) {
+            local_offsets[i] = block[lid].second + loc_offset - 1;
+        }
+    }
+
+    __syncthreads();
+
+    Tuple<I> prefix = decoupledLookbackScanNoWrite<Tuple<I>, I, AddTuple<I>, ITEMS_PER_THREAD>(states, block, AddTuple<I>(), Tuple<I>(), dyn_idx);
+
+    T *block_cast_elem = (T*) &block;
+
+    #pragma unroll
+    for (I i = 0; i < ITEMS_PER_THREAD; i++) {
+        I lid = blockDim.x * i + threadIdx.x;
+        block_cast_elem[local_offsets[i]] = elems[i];
+    }
+    __syncthreads();
+
+    #pragma unroll
+    for (I i = 0; i < ITEMS_PER_THREAD; i++) {
+        I lid = blockDim.x * i + threadIdx.x;
+        elems[i] = block_cast_elem[lid];
+    }
+    __syncthreads();
+
+    I *block_cast_idx = (I*) &block;
+
+    #pragma unroll
+    for (I i = 0; i < ITEMS_PER_THREAD; i++) {
+        I lid = blockDim.x * i + threadIdx.x;
+        block[local_offsets[i]] = local_offsets[i];
+    }
+    __syncthreads();
+
+    #pragma unroll
+    for (I i = 0; i < ITEMS_PER_THREAD; i++) {
+        I lid = blockDim.x * i + threadIdx.x;
+        I gid = glb_offs + lid;
+        if (gid < size && ((bools >> i) & 1)) {
+            d_out[block[lid].first - 1] = elems[i];
+        } else if (gid < size && !((bools >> i) & 1)) {
+            d_out[block[lid].second + loc_offset - 1] = elems[i];
         }
     }
     
@@ -120,11 +213,12 @@ void testPartition(int32_t* input, size_t input_size, int32_t* expected, size_t 
     const I size = input_size;
     const I BLOCK_SIZE = 256;
     const I ITEMS_PER_THREAD = 15;
+    assert(ITEMS_PER_THREAD <= 32);
     const I NUM_LOGICAL_BLOCKS = (size + BLOCK_SIZE * ITEMS_PER_THREAD - 1) / (BLOCK_SIZE * ITEMS_PER_THREAD);
     const I ARRAY_BYTES = size * sizeof(int32_t);
     const I STATES_BYTES = NUM_LOGICAL_BLOCKS * sizeof(State<Tuple<I>>);
     const I WARMUP_RUNS = 1000;
-    const I RUNS = 10;
+    const I RUNS = 500;
 
     std::vector<int32_t> h_in(size);
     std::vector<int32_t> h_out(size, 0);

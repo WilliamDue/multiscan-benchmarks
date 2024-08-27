@@ -216,8 +216,6 @@ lexer(LexerCtx ctx,
         *new_size = indices[ITEMS_PER_THREAD * BLOCK_SIZE - 1];
         *is_valid = is_accept(states[ITEMS_PER_THREAD * BLOCK_SIZE - 1]);
     }
-
-    __syncthreads();
 }
 
 void testLexer(uint8_t* input,
