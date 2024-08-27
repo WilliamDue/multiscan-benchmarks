@@ -308,7 +308,7 @@ void testFilter(int32_t* input, size_t input_size, int32_t* expected, size_t exp
     const I ARRAY_BYTES = size * sizeof(int32_t);
     const I STATES_BYTES = NUM_LOGICAL_BLOCKS * sizeof(State<I>);
     const I WARMUP_RUNS = 1000;
-    const I RUNS = 10;
+    const I RUNS = 1000;
     assert(ITEMS_PER_THREAD <= 32);
 
     std::vector<int32_t> h_in(size);
@@ -400,7 +400,7 @@ void testFilterCoalescedWrite(int32_t* input, size_t input_size, int32_t* expect
     const I ARRAY_BYTES = size * sizeof(int32_t);
     const I STATES_BYTES = NUM_LOGICAL_BLOCKS * sizeof(State<I>);
     const I WARMUP_RUNS = 1000;
-    const I RUNS = 10;
+    const I RUNS = 1000;
     assert(ITEMS_PER_THREAD <= 32);
 
     std::vector<int32_t> h_in(size);
@@ -492,7 +492,7 @@ void testFilterFewerShmemWrite(int32_t* input, size_t input_size, int32_t* expec
     const I ARRAY_BYTES = size * sizeof(int32_t);
     const I STATES_BYTES = NUM_LOGICAL_BLOCKS * sizeof(State<I>);
     const I WARMUP_RUNS = 1000;
-    const I RUNS = 10;
+    const I RUNS = 1000;
     assert(ITEMS_PER_THREAD <= 32);
 
     std::vector<int32_t> h_in(size);
