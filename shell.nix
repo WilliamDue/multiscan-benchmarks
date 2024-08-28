@@ -2,7 +2,7 @@
 { pkgs ? import <nixpkgs> { config.allowUnfree = true; } }:
 (pkgs.buildFHSUserEnv {
   name = "cuda-env";
-  targetPkgs = pkgs: with pkgs; [ 
+  targetPkgs = (pkgs: with pkgs; [ 
     git
     gitRepo
     gnupg
@@ -21,10 +21,10 @@
     xorg.libXext xorg.libX11 xorg.libXv xorg.libXrandr zlib 
     ncurses5
     # stdenv.cc
+    futhark
     gcc12
     binutils
-    futhark
-  ];
+  ]);
   multiPkgs = pkgs: with pkgs; [ zlib ];
   runScript = "bash";
   profile = ''

@@ -31,7 +31,7 @@ void compute_descriptors(timeval* measurements, size_t size, size_t bytes) {
     double bound = (0.95 * sample_std) / sqrt(d_size - 1);
 
     printf("Average time: %.0lfμs", sample_mean);
-    printf(" (95%% CI: [%.0lfμs, %.0lfμs])\n", sample_mean - bound, sample_mean + bound);
+    printf(" (95%% CI: [%.0lfμs, %.0lfμs])", sample_mean - bound, sample_mean + bound);
     printf("Memory Bandwidth Usage: %.0lfGB/s\n", sample_gbps);
 }
 

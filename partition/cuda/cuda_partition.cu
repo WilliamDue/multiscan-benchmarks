@@ -411,6 +411,70 @@ void testPartitionCoalescedWrite(int32_t* input, size_t input_size, int32_t* exp
     gpuAssert(cudaFree(d_offset));
 }
 
+void testPartitionCUB(int32_t* input, size_t input_size, int32_t* expected, size_t expected_size) {
+    using I = uint32_t;
+    const I size = input_size;
+    const I ARRAY_BYTES = size * sizeof(int32_t);
+    const I WARMUP_RUNS = 1000;
+    const I RUNS = 500;
+
+    std::vector<int32_t> h_in(size);
+    std::vector<int32_t> h_out(size, 0);
+
+    for (I i = 0; i < size; ++i) {
+        h_in[i] = input[i];
+    }
+
+    I *d_offset;
+    int32_t *d_in, *d_out;
+    gpuAssert(cudaMalloc((void**)&d_offset, sizeof(I)));
+    cudaMemset(d_offset, 0, sizeof(I));
+    gpuAssert(cudaMalloc((void**)&d_in, ARRAY_BYTES));
+    gpuAssert(cudaMalloc((void**)&d_out, ARRAY_BYTES));
+    gpuAssert(cudaMemcpy(d_in, h_in.data(), ARRAY_BYTES, cudaMemcpyHostToDevice));
+    
+    void *d_temp_storage = nullptr;
+    size_t temp_storage_bytes = 0;
+
+    Predicate pred;
+    cub::DevicePartition::If(d_temp_storage, temp_storage_bytes, d_in, d_out, d_offset, size, pred);
+
+    cudaMalloc(&d_temp_storage, temp_storage_bytes);
+    
+    for (I i = 0; i < WARMUP_RUNS; ++i) {
+        cub::DevicePartition::If(d_temp_storage, temp_storage_bytes, d_in, d_out, d_offset, size, pred);
+        cudaDeviceSynchronize();
+        gpuAssert(cudaPeekAtLastError());
+    }
+
+    timeval * temp = (timeval *) malloc(sizeof(timeval) * RUNS);
+    timeval prev;
+    timeval curr;
+    timeval t_diff;
+
+    for (I i = 0; i < RUNS; ++i) {
+        gettimeofday(&prev, NULL);
+        cub::DevicePartition::If(d_temp_storage, temp_storage_bytes, d_in, d_out, d_offset, size, pred);
+        cudaDeviceSynchronize();
+        gettimeofday(&curr, NULL);
+        timeval_subtract(&t_diff, &curr, &prev);
+        temp[i] = t_diff;
+        gpuAssert(cudaPeekAtLastError());
+    }
+
+    size_t moved_bytes = 2 * ARRAY_BYTES;
+    
+    compute_descriptors(temp, RUNS, moved_bytes);
+    free(temp);
+
+    cub::DevicePartition::If(d_temp_storage, temp_storage_bytes, d_in, d_out, d_offset, size, pred);
+    cudaDeviceSynchronize();
+    gpuAssert(cudaMemcpy(h_out.data(), d_out, ARRAY_BYTES, cudaMemcpyDeviceToHost));
+    gpuAssert(cudaFree(d_in));
+    gpuAssert(cudaFree(d_out));
+    gpuAssert(cudaFree(d_offset));
+}
+
 int main(int32_t argc, char *argv[]) {
     assert(argc == 3);
     size_t input_size;
@@ -420,6 +484,8 @@ int main(int32_t argc, char *argv[]) {
     testPartition(input, input_size, expected, expected_size);
     printf("\n");
     testPartitionCoalescedWrite(input, input_size, expected, expected_size);
+    printf("\n");
+    testPartitionCUB(input, input_size, expected, expected_size);
     free(input);
     free(expected);
 
