@@ -27,22 +27,22 @@ $(DATA_PATH)/randomints_empty_500MiB.in:
 	(cd $(DATA_PATH) && make)
 
 $(FUTHARK_PROGRAM): $(FUTHARK_PATH)/$(FUTHARK_PROGRAM).fut
-	futhark cuda $< -o $(FUTHARK_PROGRAM)
+	futhark cuda --server $< -o $(FUTHARK_PROGRAM)
 
-randomints_sparse_500MiB.out: $(DATA_PATH)/randomints_sparse_500MiB.in $(FUTHARK_PROGRAM)
-	cat $< | ./$(FUTHARK_PROGRAM) -e expected -b > $@
+randomints_sparse_500MiB.out: $(DATA_PATH)/randomints_sparse_500MiB.in
+	futhark script $(FUTHARK_PATH)/$(FUTHARK_PROGRAM).fut 'expected ($$loaddata "$<")' -b >$@
 
 randomints_dense_500MiB.out: $(DATA_PATH)/randomints_dense_500MiB.in $(FUTHARK_PROGRAM)
-	cat $< | ./$(FUTHARK_PROGRAM) -e expected -b > $@
+	futhark script ./$(FUTHARK_PROGRAM) 'expected ($$loaddata "$<")' -b >$@
 
-randomints_moderate_500MiB.out: $(DATA_PATH)/randomints_moderate_500MiB.in $(FUTHARK_PROGRAM)
-	cat $< | ./$(FUTHARK_PROGRAM) -e expected -b > $@
+randomints_moderate_500MiB.out: $(DATA_PATH)/randomints_moderate_500MiB.in
+	futhark script ./$(FUTHARK_PROGRAM) 'expected ($$loaddata "$<")' -b >$@
 
-randomints_empty_500MiB.out: $(DATA_PATH)/randomints_empty_500MiB.in $(FUTHARK_PROGRAM)
-	cat $< | ./$(FUTHARK_PROGRAM) -e expected -b > $@
+randomints_empty_500MiB.out: $(DATA_PATH)/randomints_empty_500MiB.in
+	futhark script ./$(FUTHARK_PROGRAM) 'expected ($$loaddata "$<")' -b >$@
 
-randomints_full_500MiB.out: $(DATA_PATH)/randomints_full_500MiB.in $(FUTHARK_PROGRAM)
-	cat $< | ./$(FUTHARK_PROGRAM) -e expected -b > $@
+randomints_full_500MiB.out: $(DATA_PATH)/randomints_full_500MiB.in
+	futhark script ./$(FUTHARK_PROGRAM) 'expected ($$loaddata "$<")' -b >$@
 
 bench: randomints_dense_500MiB.out \
 	   randomints_sparse_500MiB.out \
