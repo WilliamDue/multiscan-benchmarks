@@ -141,7 +141,7 @@ filterCoalescedWrite(T* d_in,
                      volatile I* new_size) {
     volatile __shared__ I block[ITEMS_PER_THREAD * BLOCK_SIZE];
     volatile __shared__ I block_aux[BLOCK_SIZE];
-    volatile __shared__ I block_keep_size;
+    I block_keep_size;
     T elems[ITEMS_PER_THREAD];
     uint32_t bools = 0;
     I local_offsets[ITEMS_PER_THREAD];
@@ -172,9 +172,8 @@ filterCoalescedWrite(T* d_in,
         local_offsets[i] = block[lid];
     }
 
-    if (threadIdx.x == blockDim.x - 1) {
-        block_keep_size = block[ITEMS_PER_THREAD * BLOCK_SIZE - 1];
-    }
+    block_keep_size = block[ITEMS_PER_THREAD * BLOCK_SIZE - 1];
+    
     __syncthreads();
 
     I prefix = decoupledLookbackScanNoWrite<I, I, Add<I>, ITEMS_PER_THREAD>(states, block, Add<I>(), I(), dyn_idx);
