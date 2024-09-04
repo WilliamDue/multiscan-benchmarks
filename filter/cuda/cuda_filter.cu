@@ -6,7 +6,6 @@
 #include "../../common/util.cu.h"
 #include "../../common/data.h"
 #include <unistd.h>
-#define PAD "%-38s "
 
 template<typename I>
 struct Add {
@@ -302,7 +301,6 @@ void testFilter(int32_t* input, size_t input_size, int32_t* expected, size_t exp
     }
 
     if (test_passes) {
-        printf(PAD, "Filter");
         compute_descriptors(temp, RUNS, ARRAY_BYTES + temp_size * sizeof(int32_t));
     }
 
@@ -393,7 +391,6 @@ void testFilterCoalescedWrite(int32_t* input, size_t input_size, int32_t* expect
     }
 
     if (test_passes) {
-        printf(PAD, "Filter Coalesced Write");
         compute_descriptors(temp, RUNS, ARRAY_BYTES + temp_size * sizeof(int32_t));
     }
 
@@ -486,7 +483,6 @@ void testFilterFewerShmemWrite(int32_t* input, size_t input_size, int32_t* expec
     }
 
     if (test_passes) {
-        printf(PAD, "Filter With Fewer Shared Memory Writes");
         compute_descriptors(temp, RUNS, ARRAY_BYTES + temp_size * sizeof(int32_t));
     }
 
@@ -569,7 +565,6 @@ void testFilterCUB(int32_t* input, size_t input_size, int32_t* expected, size_t 
     }
 
     if (test_passes) {
-        printf(PAD, "Filter (CUB)");
         compute_descriptors(temp, RUNS, ARRAY_BYTES + temp_size * sizeof(int32_t));
     }
 
@@ -586,20 +581,38 @@ int main(int32_t argc, char *argv[]) {
     size_t expected_size;
 
     void (*func)(int32_t *, size_t, int32_t *, size_t) = NULL;
-    if (strcmp(argv[1], "filter")) {
+    if (strcmp(argv[1], "filter") == 0) {
+        printf("Filter Test:\n");
         func = testFilter;
-    } else if (strcmp(argv[1], "coalesced")) {
+    } else if (strcmp(argv[1], "coalesced") == 0) {
+        printf("Filter Coalesced Write Test:\n");
         func = testFilterCoalescedWrite;
-    } else if (strcmp(argv[1], "fewer")) {
+    } else if (strcmp(argv[1], "fewer") == 0) {
+        printf("Filter With Fewer Shared Memory Writes Test:\n");
         func = testFilterFewerShmemWrite;
-    } else if (strcmp(argv[1], "cub")) {
+    } else if (strcmp(argv[1], "cub") == 0) {
+        printf("Filter (CUB) Test:\n");
         func = testFilterCUB;
     }
     assert(func != NULL);
 
+    int max_size = 0;
     for (size_t i = 0; i < programs; i++) {
-        int32_t* input = read_i32_array(argv[2 + 2*i], &input_size);
-        int32_t* expected = read_i32_array(argv[2 + 2*i + 1], &expected_size);
+        int temp = strlen(argv[2 + 2 * i]);
+        if (max_size < temp) {
+            max_size = temp;
+        }
+    }
+    
+    char format[1024];
+    sprintf(format, "%%-%ds ", max_size + 1);
+
+    for (size_t i = 0; i < programs; i++) {
+        int32_t* input = read_i32_array(argv[2 + 2 * i], &input_size);
+        int32_t* expected = read_i32_array(argv[2 + 2 * i + 1], &expected_size);
+        char temp[1024];
+        sprintf(temp, "%s:", argv[2 + 2 * i]);
+        printf(format, temp);
         func(input, input_size, expected, expected_size);
 
         input_size = 0;

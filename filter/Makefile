@@ -62,29 +62,29 @@ bench: randomints_dense_500MiB.out \
 	futhark bench $(FUTHARK_PATH)/$(FUTHARK_PROGRAM).fut --backend=cuda
 	@echo -e "$(RED)==============="
 	@echo -e "$(GREEN)=== CUDA ==="
-	./$(CUDA_PROGRAM) filter $(DATA_PATH)/randomints_full_500MiB.in ./randomints_full_500MiB.out \
+	@./$(CUDA_PROGRAM) filter $(DATA_PATH)/randomints_full_500MiB.in ./randomints_full_500MiB.out \
+                              $(DATA_PATH)/randomints_dense_500MiB.in ./randomints_dense_500MiB.out \
+	                          $(DATA_PATH)/randomints_moderate_500MiB.in ./randomints_moderate_500MiB.out \
+	                          $(DATA_PATH)/randomints_sparse_500MiB.in ./randomints_sparse_500MiB.out \
+	                          $(DATA_PATH)/randomints_empty_500MiB.in ./randomints_empty_500MiB.out
+	@echo ""
+	@./$(CUDA_PROGRAM) coalesced $(DATA_PATH)/randomints_full_500MiB.in ./randomints_full_500MiB.out \
+	                             $(DATA_PATH)/randomints_dense_500MiB.in ./randomints_dense_500MiB.out \
+	                             $(DATA_PATH)/randomints_moderate_500MiB.in ./randomints_moderate_500MiB.out \
+	                             $(DATA_PATH)/randomints_sparse_500MiB.in ./randomints_sparse_500MiB.out \
+	                             $(DATA_PATH)/randomints_empty_500MiB.in ./randomints_empty_500MiB.out
+	@echo ""
+	@./$(CUDA_PROGRAM) fewer $(DATA_PATH)/randomints_full_500MiB.in ./randomints_full_500MiB.out \
 	                         $(DATA_PATH)/randomints_dense_500MiB.in ./randomints_dense_500MiB.out \
-					         $(DATA_PATH)/randomints_moderate_500MiB.in ./randomints_moderate_500MiB.out \
-					         $(DATA_PATH)/randomints_sparse_500MiB.in ./randomints_sparse_500MiB.out \
-					         $(DATA_PATH)/randomints_empty_500MiB.in ./randomints_empty_500MiB.out
+	                         $(DATA_PATH)/randomints_moderate_500MiB.in ./randomints_moderate_500MiB.out \
+	                         $(DATA_PATH)/randomints_sparse_500MiB.in ./randomints_sparse_500MiB.out \
+	                         $(DATA_PATH)/randomints_empty_500MiB.in ./randomints_empty_500MiB.out
 	@echo ""
-	./$(CUDA_PROGRAM) coalesced $(DATA_PATH)/randomints_full_500MiB.in ./randomints_full_500MiB.out \
-	                            $(DATA_PATH)/randomints_dense_500MiB.in ./randomints_dense_500MiB.out \
-					            $(DATA_PATH)/randomints_moderate_500MiB.in ./randomints_moderate_500MiB.out \
-					            $(DATA_PATH)/randomints_sparse_500MiB.in ./randomints_sparse_500MiB.out \
-					            $(DATA_PATH)/randomints_empty_500MiB.in ./randomints_empty_500MiB.out
-	@echo ""
-	./$(CUDA_PROGRAM) fewer $(DATA_PATH)/randomints_full_500MiB.in ./randomints_full_500MiB.out \
-	                        $(DATA_PATH)/randomints_dense_500MiB.in ./randomints_dense_500MiB.out \
-					        $(DATA_PATH)/randomints_moderate_500MiB.in ./randomints_moderate_500MiB.out \
-					        $(DATA_PATH)/randomints_sparse_500MiB.in ./randomints_sparse_500MiB.out \
-					        $(DATA_PATH)/randomints_empty_500MiB.in ./randomints_empty_500MiB.out
-	@echo ""
-	./$(CUDA_PROGRAM) cub $(DATA_PATH)/randomints_full_500MiB.in ./randomints_full_500MiB.out \
-	                      $(DATA_PATH)/randomints_dense_500MiB.in ./randomints_dense_500MiB.out \
-					      $(DATA_PATH)/randomints_moderate_500MiB.in ./randomints_moderate_500MiB.out \
-					      $(DATA_PATH)/randomints_sparse_500MiB.in ./randomints_sparse_500MiB.out \
-					      $(DATA_PATH)/randomints_empty_500MiB.in ./randomints_empty_500MiB.out
+	@./$(CUDA_PROGRAM) cub $(DATA_PATH)/randomints_full_500MiB.in ./randomints_full_500MiB.out \
+	                       $(DATA_PATH)/randomints_dense_500MiB.in ./randomints_dense_500MiB.out \
+	                       $(DATA_PATH)/randomints_moderate_500MiB.in ./randomints_moderate_500MiB.out \
+	                       $(DATA_PATH)/randomints_sparse_500MiB.in ./randomints_sparse_500MiB.out \
+	                       $(DATA_PATH)/randomints_empty_500MiB.in ./randomints_empty_500MiB.out
 	@echo -e "$(GREEN)============$(DEFAULT)"
 
 $(CUDA_PROGRAM): $(CUDA_PATH)/$(CUDA_PROGRAM).cu $(COMMON_PATH)/sps.cu.h $(COMMON_PATH)/util.cu.h $(COMMON_PATH)/data.h
