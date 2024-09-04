@@ -21,7 +21,7 @@
     xorg.libXext xorg.libX11 xorg.libXv xorg.libXrandr zlib 
     ncurses5
     # stdenv.cc
-    futhark
+    # futhark
     gcc12
     binutils
   ]);
@@ -33,5 +33,6 @@
     export EXTRA_LDFLAGS="-L/lib -L${pkgs.linuxPackages.nvidia_x11}/lib"
     export EXTRA_CCFLAGS="-I/usr/include"
     export PATH=${pkgs.gcc12}/bin:$PATH
+    export PATH=~/.local/bin:$PATH
   '';
 }).env

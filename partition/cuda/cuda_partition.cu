@@ -5,6 +5,7 @@
 #include "../../common/util.cu.h"
 #include "../../common/data.h"
 #include <cub/cub.cuh>
+#define PAD "%-38s "
 
 template<typename T>
 struct Tuple {
@@ -298,7 +299,7 @@ void testPartition(int32_t* input, size_t input_size, int32_t* expected, size_t 
         test_passes &= h_out[i] == expected[i];
 
         if (!test_passes) {
-            std::cout << "Partition Test Failed: Due to elements mismatch at index=" << i << std::endl;
+            std::cout << "Partition Test Failed: Due to elements mismatch at index=" << i << "." << std::endl;
             break;
         }
     }

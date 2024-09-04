@@ -30,9 +30,9 @@ void compute_descriptors(timeval* measurements, size_t size, size_t bytes) {
     double sample_std = sqrt(sample_variance);
     double bound = (0.95 * sample_std) / sqrt(d_size - 1);
 
-    printf("Average time: %.0lfμs", sample_mean);
-    printf(" (95%% CI: [%.0lfμs, %.0lfμs])", sample_mean - bound, sample_mean + bound);
-    printf("Memory Bandwidth Usage: %.0lfGB/s\n", sample_gbps);
+    printf("%7.0lfμs ", sample_mean);
+    printf("(95%% CI: [%7.0lfμs, %7.0lfμs]) ", sample_mean - bound, sample_mean + bound);
+    printf("%5.0lfGB/s\n", sample_gbps);
 }
 
 int _gpuAssert(cudaError_t code, const char *fname, int lineno) {
@@ -58,6 +58,5 @@ void info() {
     printf("Device name: %s\n", prop.name);
     printf("Number of hardware threads: %d\n", max_hwdth);
     printf("Max block size: %d\n", max_block);
-    printf("Shared memory size: %d\n", max_shmen);
-    puts("====");
+    printf("Shared memory size: %d\n\n", max_shmen);
 }

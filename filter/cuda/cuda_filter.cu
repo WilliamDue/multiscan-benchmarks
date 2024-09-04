@@ -5,6 +5,8 @@
 #include "../../common/sps.cu.h"
 #include "../../common/util.cu.h"
 #include "../../common/data.h"
+#include <unistd.h>
+#define PAD "%-38s "
 
 template<typename I>
 struct Add {
@@ -281,10 +283,6 @@ void testFilter(int32_t* input, size_t input_size, int32_t* expected, size_t exp
     }
 
     I temp_size = 0;
-    gpuAssert(cudaMemcpy(&temp_size, d_new_size, sizeof(I), cudaMemcpyDeviceToHost));
-    compute_descriptors(temp, RUNS, ARRAY_BYTES + temp_size * sizeof(int32_t));
-    free(temp);
-
     filter<int32_t, I, Predicate, BLOCK_SIZE, ITEMS_PER_THREAD><<<NUM_LOGICAL_BLOCKS, BLOCK_SIZE>>>(d_in, d_out, d_states, size, NUM_LOGICAL_BLOCKS, pred, d_dyn_idx_ptr, d_new_size);
     cudaDeviceSynchronize();
     gpuAssert(cudaMemcpy(h_out.data(), d_out, ARRAY_BYTES, cudaMemcpyDeviceToHost));
@@ -292,21 +290,23 @@ void testFilter(int32_t* input, size_t input_size, int32_t* expected, size_t exp
     
     bool test_passes = temp_size == expected_size;
     if (!test_passes) {
-        std::cout << "Filter Test Failed: Expected size=" << expected_size << " but got size=" << temp_size << "\n";
+        std::cout << "Filter Test Failed: Expected size=" << expected_size << " but got size=" << temp_size << ".\n";
     } else {
         for (I i = 0; i < expected_size; ++i) {
             test_passes &= h_out[i] == expected[i];
 
             if (!test_passes) {
-                std::cout << "Filter Test Failed: Due to elements mismatch at index=" << i << "\n";
+                std::cout << "Filter Test Failed: Due to elements mismatch at index=" << i << ".\n";
             }
         } 
     }
 
     if (test_passes) {
-        std::cout << "Filter test passed." << "\n";
+        printf(PAD, "Filter");
+        compute_descriptors(temp, RUNS, ARRAY_BYTES + temp_size * sizeof(int32_t));
     }
 
+    free(temp);
     gpuAssert(cudaFree(d_in));
     gpuAssert(cudaFree(d_out));
     gpuAssert(cudaFree(d_states));
@@ -373,9 +373,6 @@ void testFilterCoalescedWrite(int32_t* input, size_t input_size, int32_t* expect
     }
 
     I temp_size = 0;
-    gpuAssert(cudaMemcpy(&temp_size, d_new_size, sizeof(I), cudaMemcpyDeviceToHost));
-    compute_descriptors(temp, RUNS, ARRAY_BYTES + temp_size * sizeof(int32_t));
-    free(temp);
 
     filterCoalescedWrite<int32_t, I, Predicate, BLOCK_SIZE, ITEMS_PER_THREAD><<<NUM_LOGICAL_BLOCKS, BLOCK_SIZE>>>(d_in, d_out, d_states, size, NUM_LOGICAL_BLOCKS, pred, d_dyn_idx_ptr, d_new_size);
     cudaDeviceSynchronize();
@@ -384,21 +381,23 @@ void testFilterCoalescedWrite(int32_t* input, size_t input_size, int32_t* expect
     
     bool test_passes = temp_size == expected_size;
     if (!test_passes) {
-        std::cout << "Filter Coalesced Write Test Failed: Expected size=" << expected_size << " but got size=" << temp_size << "\n";
+        std::cout << "Filter Coalesced Write Test Failed: Expected size=" << expected_size << " but got size=" << temp_size << ".\n";
     } else {
         for (I i = 0; i < expected_size; ++i) {
             test_passes &= h_out[i] == expected[i];
 
             if (!test_passes) {
-                std::cout << "Filter Coalesced Write Test Failed: Due to elements mismatch at index=" << i << "\n";
+                std::cout << "Filter Coalesced Write Test Failed: Due to elements mismatch at index=" << i << ".\n";
             }
         } 
     }
 
     if (test_passes) {
-        std::cout << "Filter Coalesced Write test passed." << "\n";
+        printf(PAD, "Filter Coalesced Write");
+        compute_descriptors(temp, RUNS, ARRAY_BYTES + temp_size * sizeof(int32_t));
     }
 
+    free(temp);
     gpuAssert(cudaFree(d_in));
     gpuAssert(cudaFree(d_out));
     gpuAssert(cudaFree(d_states));
@@ -466,7 +465,6 @@ void testFilterFewerShmemWrite(int32_t* input, size_t input_size, int32_t* expec
 
     I temp_size = 0;
     gpuAssert(cudaMemcpy(&temp_size, d_new_size, sizeof(I), cudaMemcpyDeviceToHost));
-    compute_descriptors(temp, RUNS, ARRAY_BYTES + temp_size * sizeof(int32_t));
     free(temp);
 
     filterFewerShmemWrite<int32_t, I, Predicate, BLOCK_SIZE, ITEMS_PER_THREAD><<<NUM_LOGICAL_BLOCKS, BLOCK_SIZE>>>(d_in, d_out, d_states, size, NUM_LOGICAL_BLOCKS, pred, d_dyn_idx_ptr, d_new_size);
@@ -476,19 +474,20 @@ void testFilterFewerShmemWrite(int32_t* input, size_t input_size, int32_t* expec
     
     bool test_passes = temp_size == expected_size;
     if (!test_passes) {
-        std::cout << "Filter With Fewer Shared Memory Writes Test Failed: Expected size=" << expected_size << " but got size=" << temp_size << "\n";
+        std::cout << "Filter With Fewer Shared Memory Writes Test Failed: Expected size=" << expected_size << " but got size=" << temp_size << ".\n";
     } else {
         for (I i = 0; i < expected_size; ++i) {
             test_passes &= h_out[i] == expected[i];
 
             if (!test_passes) {
-                std::cout << "Filter With Fewer Shared Memory Writes Test Failed: Due to elements mismatch at index=" << i << "\n";
+                std::cout << "Filter With Fewer Shared Memory Writes Test Failed: Due to elements mismatch at index=" << i << ".\n";
             }
         } 
     }
 
     if (test_passes) {
-        std::cout << "Filter With Fewer Shared Memory Writes test passed." << "\n";
+        printf(PAD, "Filter With Fewer Shared Memory Writes");
+        compute_descriptors(temp, RUNS, ARRAY_BYTES + temp_size * sizeof(int32_t));
     }
 
     gpuAssert(cudaFree(d_in));
@@ -550,9 +549,6 @@ void testFilterCUB(int32_t* input, size_t input_size, int32_t* expected, size_t 
     }
 
     I temp_size = 0;
-    gpuAssert(cudaMemcpy(&temp_size, d_new_size, sizeof(I), cudaMemcpyDeviceToHost));
-    compute_descriptors(temp, RUNS, ARRAY_BYTES + temp_size * sizeof(int32_t));
-    free(temp);
 
     cub::DeviceSelect::If(d_temp_storage, temp_storage_bytes, d_in, d_out, d_new_size, size, pred);
     cudaDeviceSynchronize();
@@ -561,42 +557,57 @@ void testFilterCUB(int32_t* input, size_t input_size, int32_t* expected, size_t 
     
     bool test_passes = temp_size == expected_size;
     if (!test_passes) {
-        std::cout << "Filter (CUB) Test Failed: Expected size=" << expected_size << " but got size=" << temp_size << "\n";
+        std::cout << "Filter (CUB) Test Failed: Expected size=" << expected_size << " but got size=" << temp_size << ".\n";
     } else {
         for (I i = 0; i < expected_size; ++i) {
             test_passes &= h_out[i] == expected[i];
 
             if (!test_passes) {
-                std::cout << "Filter (CUB) Test Failed: Due to elements mismatch at index=" << i << "\n";
+                std::cout << "Filter (CUB) Test Failed: Due to elements mismatch at index=" << i << ".\n";
             }
         } 
     }
 
     if (test_passes) {
-        std::cout << "Filter (CUB) test passed." << "\n";
+        printf(PAD, "Filter (CUB)");
+        compute_descriptors(temp, RUNS, ARRAY_BYTES + temp_size * sizeof(int32_t));
     }
 
+    free(temp);
     gpuAssert(cudaFree(d_in));
     gpuAssert(cudaFree(d_out));
     gpuAssert(cudaFree(d_new_size));
 }
 
 int main(int32_t argc, char *argv[]) {
-    assert(argc == 3);
+    assert(argc > 1 && argc % 2 == 0);
+    size_t programs = (argc - 2) / 2;
     size_t input_size;
-    int32_t* input = read_i32_array(argv[1], &input_size);
     size_t expected_size;
-    int32_t* expected = read_i32_array(argv[2], &expected_size);
-    testFilter(input, input_size, expected, expected_size);
-    printf("\n");
-    testFilterCoalescedWrite(input, input_size, expected, expected_size);
-    printf("\n");
-    testFilterFewerShmemWrite(input, input_size, expected, expected_size);
-    printf("\n");
-    testFilterCUB(input, input_size, expected, expected_size);
-    free(input);
-    free(expected);
 
+    void (*func)(int32_t *, size_t, int32_t *, size_t) = NULL;
+    if (strcmp(argv[1], "filter")) {
+        func = testFilter;
+    } else if (strcmp(argv[1], "coalesced")) {
+        func = testFilterCoalescedWrite;
+    } else if (strcmp(argv[1], "fewer")) {
+        func = testFilterFewerShmemWrite;
+    } else if (strcmp(argv[1], "cub")) {
+        func = testFilterCUB;
+    }
+    assert(func != NULL);
+
+    for (size_t i = 0; i < programs; i++) {
+        int32_t* input = read_i32_array(argv[2 + 2*i], &input_size);
+        int32_t* expected = read_i32_array(argv[2 + 2*i + 1], &expected_size);
+        func(input, input_size, expected, expected_size);
+
+        input_size = 0;
+        expected_size = 0;
+        free(expected);
+        free(input);
+    }
+    
     std::cout << std::flush;
 
     gpuAssert(cudaPeekAtLastError());
