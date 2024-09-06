@@ -133,49 +133,42 @@ lexer(LexerCtx ctx,
     volatile __shared__ state_t states_aux[BLOCK_SIZE];
     volatile __shared__ I indices[ITEMS_PER_THREAD * BLOCK_SIZE];
     volatile __shared__ I indices_aux[BLOCK_SIZE];
+    volatile __shared__ state_t last_thread_lookahead;
+    const I REG_MEM = (ITEMS_PER_THREAD + sizeof(uint64_t) - 1) / sizeof(uint64_t);
+    uint64_t copy_reg[REG_MEM];
+    uint8_t *thread_chars = (uint8_t*) copy_reg;
     uint32_t is_produce_state = 0;
-    state_t last_thread_lookahead = IDENTITY;
 
     uint32_t dyn_index = dynamicIndex<uint32_t>(dyn_index_ptr);
-    I const COPY_ITEMS_PER_THREAD = ITEMS_PER_THREAD / sizeof(uint32_t);
     I glb_offs = dyn_index * BLOCK_SIZE * ITEMS_PER_THREAD;
-    I uint32_glb_offs = dyn_index * BLOCK_SIZE * COPY_ITEMS_PER_THREAD;
 
     states_aux[threadIdx.x] = ctx.to_state(threadIdx.x);
 
     __syncthreads();
    
     #pragma unroll
-    for (I i = 0; i < COPY_ITEMS_PER_THREAD; i++) {
-        I uint32_lid = i * blockDim.x + threadIdx.x;
-        I uint32_gid = uint32_glb_offs + uint32_lid;
-        I lid = sizeof(uint32_t) * uint32_lid;
-        I gid = glb_offs + lid;
-        I last_gid = gid + sizeof(uint32_t) - 1;
-        I last_lid = lid + sizeof(uint32_t) - 1;
-        if (gid + sizeof(uint32_t) < size) {
-            uint32_t temp_states = ((uint32_t*) d_in)[uint32_gid];
-            for (I j = 0; j < sizeof(uint32_t); j++) {
-                I loc_gid = gid + j;
-                I loc_lid = lid + j;
-                uint8_t c = (temp_states >> (8 * j)) & ((uint32_t) 0xFF);
-                states[loc_lid] = states_aux[c];
-            }
-        } else {
-            for (I j = 0; j < sizeof(uint32_t); j++) {
-                I loc_gid = gid + j;
-                I loc_lid = lid + j;
-                if (loc_gid < size) {
-                    states[loc_lid] = states_aux[d_in[loc_gid]];
-                } else {
-                    states[loc_lid] = IDENTITY;
-                }
-            }
+    for (I i = 0; i < REG_MEM; i++) {
+        I lid = i * blockDim.x + threadIdx.x;
+        I gid = glb_offs / sizeof(uint64_t) + lid;
+        if (gid < size / sizeof(uint64_t) + 1) {
+            copy_reg[i] = ((uint64_t*) d_in)[gid];
         }
+    }
 
-        if (last_gid < size && last_lid == ITEMS_PER_THREAD * BLOCK_SIZE - 1) {
-            last_thread_lookahead = states_aux[d_in[last_gid + 1]];
+    #pragma unroll
+    for (I i = 0; i < ITEMS_PER_THREAD; i++) {
+        I lid = i * blockDim.x + threadIdx.x;
+        I gid = glb_offs + lid;
+        if (gid < size) {
+            states[lid] = states_aux[thread_chars[i]];
         }
+    }
+
+    I last_lid = ITEMS_PER_THREAD * blockDim.x;
+    if (threadIdx.x == 0 && last_lid + glb_offs < size) {
+        last_thread_lookahead = states_aux[thread_chars[ITEMS_PER_THREAD]];
+    } else if (threadIdx.x == 0) {
+        last_thread_lookahead = IDENTITY;
     }
 
     __syncthreads();
@@ -227,9 +220,7 @@ void testLexer(uint8_t* input,
     using I = uint32_t;
     const I size = input_size;
     const I BLOCK_SIZE = 256;
-    const I ITEMS_PER_THREAD = 28;
-    assert(ITEMS_PER_THREAD <= 32);
-    assert(ITEMS_PER_THREAD % 4 == 0);
+    const I ITEMS_PER_THREAD = 24;
     const I NUM_LOGICAL_BLOCKS = (size + BLOCK_SIZE * ITEMS_PER_THREAD - 1) / (BLOCK_SIZE * ITEMS_PER_THREAD);
     const I IN_ARRAY_BYTES = size * sizeof(uint8_t);
     const I INDEX_OUT_ARRAY_BYTES = size * sizeof(I);
@@ -257,7 +248,7 @@ void testLexer(uint8_t* input,
     cudaMemset(d_is_valid, false, sizeof(bool));
     gpuAssert(cudaMalloc((void**)&d_index_states, INDEX_STATES_BYTES));
     gpuAssert(cudaMalloc((void**)&d_state_states, STATE_STATES_BYTES));
-    gpuAssert(cudaMalloc((void**)&d_in, IN_ARRAY_BYTES));
+    gpuAssert(cudaMalloc((void**)&d_in, IN_ARRAY_BYTES + sizeof(uint64_t)));
     gpuAssert(cudaMalloc((void**)&d_index_out, INDEX_OUT_ARRAY_BYTES));
     gpuAssert(cudaMalloc((void**)&d_token_out, TOKEN_OUT_ARRAY_BYTES));
     gpuAssert(cudaMemcpy(d_in, input, IN_ARRAY_BYTES, cudaMemcpyHostToDevice));
