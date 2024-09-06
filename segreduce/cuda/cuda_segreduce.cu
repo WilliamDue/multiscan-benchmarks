@@ -4,6 +4,7 @@
 #include "../../common/sps.cu.h"
 #include "../../common/util.cu.h"
 #include "../../common/data.h"
+#define PAD "%-38s "
 
 template<typename T, typename I>
 struct Tuple {
@@ -185,8 +186,6 @@ void testSegreduce(int32_t* vals, bool* flags, size_t _size, int32_t* expected, 
 
     I temp_size = 0;
     gpuAssert(cudaMemcpy(&temp_size, d_new_size, sizeof(I), cudaMemcpyDeviceToHost));
-    compute_descriptors(temp, RUNS, FLAG_ARRAY_BYTES + ARRAY_BYTES + temp_size * sizeof(int32_t));
-    free(temp);
 
     segreduce<int32_t, I, Add, BLOCK_SIZE, ITEMS_PER_THREAD><<<NUM_LOGICAL_BLOCKS, BLOCK_SIZE>>>(d_in, d_flags, d_out, d_states, size, NUM_LOGICAL_BLOCKS, add, d_dyn_idx_ptr, d_new_size);
     cudaDeviceSynchronize();
@@ -208,9 +207,10 @@ void testSegreduce(int32_t* vals, bool* flags, size_t _size, int32_t* expected, 
     }
 
     if (test_passes) {
-        std::cout << "Segreduce test passed." << std::endl;
+        compute_descriptors(temp, RUNS, FLAG_ARRAY_BYTES + ARRAY_BYTES + temp_size * sizeof(int32_t));
     }
 
+    free(temp);
     gpuAssert(cudaFree(d_in));
     gpuAssert(cudaFree(d_out));
     gpuAssert(cudaFree(d_states));
@@ -234,6 +234,8 @@ int main(int32_t argc, char *argv[]) {
     int32_t c[2] = {6, 15};
     testSegreduce(a, b, 6, c, 2);
     */
+    printf("%s:\n", argv[1]);
+    printf(PAD, "Segreduce:");
     testSegreduce(vals, flags, vals_size, expected, expected_size);
     free(vals);
     free(flags);

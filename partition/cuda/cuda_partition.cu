@@ -286,7 +286,6 @@ void testPartition(int32_t* input, size_t input_size, int32_t* expected, size_t 
 
     size_t moved_bytes = 2 * ARRAY_BYTES;
     
-    compute_descriptors(temp, RUNS, moved_bytes);
     free(temp);
 
     cub::DeviceReduce::Sum(d_temp_storage, temp_storage_bytes, itr, d_offset, size);
@@ -305,7 +304,8 @@ void testPartition(int32_t* input, size_t input_size, int32_t* expected, size_t 
     }
 
     if (test_passes) {
-        std::cout << "Partition test passed." << std::endl;
+        printf(PAD, "Partition:");
+        compute_descriptors(temp, RUNS, moved_bytes);
     }
 
     gpuAssert(cudaFree(d_in));
@@ -383,8 +383,6 @@ void testPartitionCoalescedWrite(int32_t* input, size_t input_size, int32_t* exp
 
     size_t moved_bytes = 2 * ARRAY_BYTES;
     
-    compute_descriptors(temp, RUNS, moved_bytes);
-    free(temp);
 
     cub::DeviceReduce::Sum(d_temp_storage, temp_storage_bytes, itr, d_offset, size);
     partitionCoalescedWrite<int32_t, I, Predicate, BLOCK_SIZE, ITEMS_PER_THREAD><<<NUM_LOGICAL_BLOCKS, BLOCK_SIZE>>>(d_in, d_out, d_states, size, NUM_LOGICAL_BLOCKS, pred, d_dyn_idx_ptr, d_offset);
@@ -402,8 +400,10 @@ void testPartitionCoalescedWrite(int32_t* input, size_t input_size, int32_t* exp
     }
 
     if (test_passes) {
-        std::cout << "Partition Coalesced Write test passed." << std::endl;
+        printf(PAD, "Partition Coalesced Write:");
+        compute_descriptors(temp, RUNS, moved_bytes);
     }
+    free(temp);
 
     gpuAssert(cudaFree(d_in));
     gpuAssert(cudaFree(d_out));
@@ -464,7 +464,8 @@ void testPartitionCUB(int32_t* input, size_t input_size, int32_t* expected, size
     }
 
     size_t moved_bytes = 2 * ARRAY_BYTES;
-    
+
+    printf(PAD, "Partition (CUB):");    
     compute_descriptors(temp, RUNS, moved_bytes);
     free(temp);
 
@@ -482,10 +483,9 @@ int main(int32_t argc, char *argv[]) {
     int32_t* input = read_i32_array(argv[1], &input_size);
     size_t expected_size;
     int32_t* expected = read_i32_array(argv[2], &expected_size);
+    printf("%s:\n", argv[1]);
     testPartition(input, input_size, expected, expected_size);
-    printf("\n");
     testPartitionCoalescedWrite(input, input_size, expected, expected_size);
-    printf("\n");
     testPartitionCUB(input, input_size, expected, expected_size);
     free(input);
     free(expected);

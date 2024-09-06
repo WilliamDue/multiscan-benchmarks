@@ -5,6 +5,7 @@
 #include "../../common/util.cu.h"
 #include "../../common/data.h"
 #include <math.h>
+#define PAD "%-38s "
 
 using token_t = uint8_t;
 using state_t = uint16_t;
@@ -316,8 +317,6 @@ void testLexer(uint8_t* input,
     const I IN_READ = IN_ARRAY_BYTES;
     const I IN_STATE_MAP = sizeof(state_t) * size;
     const I SCAN_READ =  sizeof(state_t) * (size + size / 2); // Lowerbound, it does more work.
-    compute_descriptors(temp, RUNS, IN_READ + IN_STATE_MAP + SCAN_READ + OUT_WRITE);
-    free(temp);
     
     lexer<I, BLOCK_SIZE, ITEMS_PER_THREAD><<<NUM_LOGICAL_BLOCKS, BLOCK_SIZE>>>(
         ctx,
@@ -362,9 +361,10 @@ void testLexer(uint8_t* input,
     }
 
     if (test_passes) {
-        std::cout << "Lexer test passed." << std::endl;
+        compute_descriptors(temp, RUNS, IN_READ + IN_STATE_MAP + SCAN_READ + OUT_WRITE);
     }    
 
+    free(temp);
     gpuAssert(cudaFree(d_in));
     gpuAssert(cudaFree(d_token_out));
     gpuAssert(cudaFree(d_index_out));
@@ -397,6 +397,8 @@ int main(int32_t argc, char *argv[]) {
     uint8_t expected_tokens[5] = {1, 0, 1, 0, 1};
     size_t expected_indices_size = 5;
     */
+    printf("%s:\n", argv[1]);
+    printf(PAD, "Lexer:");
     testLexer(input, input_size, expected_indices, expected_tokens, expected_indices_size);
 
     free(input);

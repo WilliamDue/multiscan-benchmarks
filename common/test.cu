@@ -3,6 +3,7 @@
 #include <cuda_runtime.h>
 #include "sps.cu.h"
 #include "util.cu.h"
+#define PAD "%-38s "
 
 struct Add {
     __device__ inline int operator()(int a, int b) const {
@@ -67,10 +68,15 @@ void testBlocks(I size) {
         test_passes &= h_out[i] == acc;
     }
 
+
+    char str[1024];
+    sprintf(str, "n=%i: ", size);
     if (test_passes) {
-        std::cout << "Block Addition Scan Test Passed using " << size << " int32.\n";
+        printf(PAD, str);
+        printf("Passed\n");
     } else {
-        std::cout << "Block Addition Scan Test Failed using " << size << " int32.\n";
+        printf(PAD, str);
+        printf("Failed\n");
     }
 
     gpuAssert(cudaFree(d_in));
@@ -127,7 +133,11 @@ void benchMemcpy(size_t size) {
         timeval_subtract(&t_diff, &curr, &prev);
         temp[i] = t_diff;
     }
- 
+    
+    char str[1024];
+    sprintf(str, "n=%i: ", size);
+    printf(PAD, str);
+
     compute_descriptors(temp, RUNS, 2 * ARRAY_BYTES);
     free(temp);
     gpuAssert(cudaFree(d_in));
@@ -144,7 +154,9 @@ void testScan(I size) {
     const I WARMUP_RUNS = 1000;
     const I RUNS = 10;
 
-     std::cout << "Testing and Benching Addition Scan using " << size << " int32.\n";
+    char str[1024];
+    sprintf(str, "n=%i: ", size);
+    printf(PAD, str);
 
     std::vector<int> h_in(size);
     std::vector<int> h_out(size, 0);
@@ -187,9 +199,6 @@ void testScan(I size) {
         cudaMemset(d_dyn_idx_ptr, 0, sizeof(uint32_t));
     }
 
-    compute_descriptors(temp, RUNS, 2 * ARRAY_BYTES);
-    free(temp);
-
     spsScan<int, I, Add, BLOCK_SIZE, ITEMS_PER_THREAD><<<NUM_LOGICAL_BLOCKS, BLOCK_SIZE>>>(d_in, d_out, d_states, size, op, 0, d_dyn_idx_ptr);
     cudaDeviceSynchronize();
 
@@ -205,11 +214,12 @@ void testScan(I size) {
     }
 
     if (test_passes) {
-        std::cout << "Scan Test Passed.\n";
+        compute_descriptors(temp, RUNS, 2 * ARRAY_BYTES);
     } else {
         std::cout << "Scan Test Failed.\n";
     }
 
+    free(temp);
     gpuAssert(cudaFree(d_in));
     gpuAssert(cudaFree(d_out));
     gpuAssert(cudaFree(d_states));
@@ -219,7 +229,7 @@ void testScan(I size) {
 int main() {
     info();
     
-    std::cout << "\nTesting Block Wide Scan:\n";
+    std::cout << "Testing Block Wide Scan:\n";
     testBlocks<uint32_t>(1 << 6);
     testBlocks<uint32_t>(1 << 16);
     testBlocks<uint32_t>(1 << 26);
@@ -229,22 +239,15 @@ int main() {
     testBlocks<uint32_t>(10000000);
     std::cout << "\n";
     
-    std::cout << "Testing and Benching Device Wide Single Pass Scan:";
+    std::cout << "Testing and Benching Device Wide Single Pass Scan: \n";
     testScan<uint32_t>(1 << 8);
-    std::cout << "\n";
     testScan<uint32_t>(1 << 16);
-    std::cout << "\n";
     testScan<uint32_t>(1 << 26);
-    std::cout << "\n";
-
     testScan<uint32_t>(1000);
-    std::cout << "\n";
     testScan<uint32_t>(100000);
-    std::cout << "\n";
     testScan<uint32_t>(100000000);
-    std::cout << "\n";
 
-    std::cout << "Testing and Benching cudaMemcpy using device to device on 500MiB of int32:\n";
+    std::cout << "\nBenching cudaMemcpy using device to device on 500MiB of int32:\n";
     benchMemcpy(131072000);
     std::cout << "\nTesting and Benching Scan on 500MiB of int32: \n";
     testScan<uint32_t>(131072000);

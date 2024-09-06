@@ -582,16 +582,16 @@ int main(int32_t argc, char *argv[]) {
 
     void (*func)(int32_t *, size_t, int32_t *, size_t) = NULL;
     if (strcmp(argv[1], "filter") == 0) {
-        printf("Filter Test:\n");
+        printf("Filter:\n");
         func = testFilter;
     } else if (strcmp(argv[1], "coalesced") == 0) {
-        printf("Filter Coalesced Write Test:\n");
+        printf("Filter Coalesced Write:\n");
         func = testFilterCoalescedWrite;
     } else if (strcmp(argv[1], "fewer") == 0) {
-        printf("Filter With Fewer Shared Memory Writes Test:\n");
+        printf("Filter With Fewer Shared Memory Writes:\n");
         func = testFilterFewerShmemWrite;
     } else if (strcmp(argv[1], "cub") == 0) {
-        printf("Filter (CUB) Test:\n");
+        printf("Filter (CUB):\n");
         func = testFilterCUB;
     }
     assert(func != NULL);

@@ -6,6 +6,9 @@ CUDA_PATH=./cuda
 CUDA_PROGRAM=cuda_lexer
 COMPILER?=nvcc
 FLAGS?=-O3 --std=c++14 -diag-suppress 550
+RED=\u001b[31m
+GREEN=\u001b[32m
+DEFAULT=\u001b[10m
 
 default: bench
 
@@ -44,17 +47,16 @@ bench: $(DATA_PATH)/tokens_dense_500MiB.in \
 	   tokens_sparse_500MiB.out \
 	   $(FUTHARK_PROGRAM) \
 	   $(CUDA_PROGRAM)
+	@echo -e "$(RED)=== FUTHARK LEXER ==="
+	@futhark bench $(FUTHARK_PATH)/$(FUTHARK_PROGRAM).fut --backend=cuda
+	@echo -e "$(RED)==============="
+	@echo -e "$(GREEN)=== CUDA LEXER ==="
+	@./$(CUDA_PROGRAM) $(DATA_PATH)/tokens_dense_500MiB.in tokens_dense_500MiB.out
 	@echo ""
-	@echo "Futhark:"
-	futhark bench $(FUTHARK_PATH)/$(FUTHARK_PROGRAM).fut --backend=cuda
+	@./$(CUDA_PROGRAM) $(DATA_PATH)/tokens_moderate_500MiB.in tokens_moderate_500MiB.out
 	@echo ""
-	@echo "Cuda:"
-	./$(CUDA_PROGRAM) $(DATA_PATH)/tokens_dense_500MiB.in tokens_dense_500MiB.out
-	@echo ""
-	./$(CUDA_PROGRAM) $(DATA_PATH)/tokens_moderate_500MiB.in tokens_moderate_500MiB.out
-	@echo ""
-	./$(CUDA_PROGRAM) $(DATA_PATH)/tokens_sparse_500MiB.in tokens_sparse_500MiB.out
-	@echo ""
+	@./$(CUDA_PROGRAM) $(DATA_PATH)/tokens_sparse_500MiB.in tokens_sparse_500MiB.out
+	@echo -e "$(GREEN)============$(DEFAULT)"
 
 clean:
 	rm -rf $(CUDA_PROGRAM) $(FUTHARK_PROGRAM) *.c *.in *.out $(FUTHARK_PATH)/*.c $(FUTHARK_PATH)/$(FUTHARK_PROGRAM)
