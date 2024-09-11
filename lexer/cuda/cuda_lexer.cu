@@ -221,28 +221,38 @@ lexer(LexerCtx ctx,
     volatile __shared__ I indices[ITEMS_PER_THREAD * BLOCK_SIZE];
     volatile __shared__ I indices_aux[BLOCK_SIZE];
     volatile state_t* states_aux = (volatile state_t*) indices;
-    const I REG_MEM = 1 + (ITEMS_PER_THREAD - 1) / sizeof(uint64_t);
+    const I REG_MEM = ITEMS_PER_THREAD / sizeof(uint64_t);
     uint64_t copy_reg[REG_MEM];
     uint8_t *chars_reg = (uint8_t*) copy_reg;
     uint32_t is_produce_state = 0;
 
     uint32_t dyn_index = dynamicIndex<uint32_t>(dyn_index_ptr);
     I glb_offs = dyn_index * BLOCK_SIZE * ITEMS_PER_THREAD;
-    I copy_glb_offs = dyn_index * BLOCK_SIZE * REG_MEM;
+    I uint64_glb_offs = dyn_index * BLOCK_SIZE * REG_MEM;
 
     states_aux[threadIdx.x] = ctx.to_state(threadIdx.x);
 
     __syncthreads();
    
-    /*
     #pragma unroll
     for (I i = 0; i < REG_MEM; i++) {
-        I lid = i * blockDim.x + threadIdx.x;
-        I gid = copy_glb_offs + lid;
-        copy_reg[i] = ((uint64_t*) d_in)[gid];
+        I uint64_lid = i * blockDim.x + threadIdx.x;
+        I uint64_gid = uint64_glb_offs + uint64_lid;
+        I lid = sizeof(uint64_t) * uint64_lid;
+        I gid = glb_offs + lid;
+        if (gid + sizeof(uint64_t) < size) {
+            copy_reg[i] = ((uint64_t*) d_in)[uint64_gid];
+        } else {
+            for (I j = 0; j < sizeof(uint64_t); j++) {
+                I loc_gid = gid + j;
+                if (loc_gid < size) {
+                    chars_reg[sizeof(uint64_t) * i + j] = d_in[loc_gid];
+                }
+            }
+        }
     }
-    */
-
+    
+    /*
     // This works but the code above does not copy it in an ideal manner.
     #pragma unroll
     for (I i = 0; i < ITEMS_PER_THREAD; i++) {
@@ -252,15 +262,19 @@ lexer(LexerCtx ctx,
             chars_reg[i] = d_in[gid];
         }
     }
+    */
     
     #pragma unroll
-    for (I i = 0; i < ITEMS_PER_THREAD; i++) {
+    for (I i = 0; i < REG_MEM; i++) {
         I lid = i * blockDim.x + threadIdx.x;
-        I gid = glb_offs + lid;
-        if (gid < size) {
-            states[lid] = states_aux[chars_reg[i]];
-        } else {
-            states[lid] = IDENTITY;
+        I _gid = glb_offs + sizeof(uint64_t) * lid;
+        for (I j = 0; j < sizeof(uint64_t); j++) {
+            I gid = _gid + j;
+            if (gid < size) {
+                states[sizeof(uint64_t) * lid + j] = states_aux[chars_reg[sizeof(uint64_t) * i + j]];
+            } else {
+                states[sizeof(uint64_t) * lid + j] = IDENTITY;
+            }
         }
     }
 
@@ -318,7 +332,7 @@ void testLexer(uint8_t* input,
     using I = uint32_t;
     const I size = input_size;
     const I BLOCK_SIZE = 256;
-    const I ITEMS_PER_THREAD = 31;
+    const I ITEMS_PER_THREAD = 24;
     const I NUM_LOGICAL_BLOCKS = (size + BLOCK_SIZE * ITEMS_PER_THREAD - 1) / (BLOCK_SIZE * ITEMS_PER_THREAD);
     const I IN_ARRAY_BYTES = size * sizeof(uint8_t);
     const I INDEX_OUT_ARRAY_BYTES = size * sizeof(I);
@@ -349,7 +363,8 @@ void testLexer(uint8_t* input,
     gpuAssert(cudaMalloc((void**)&d_index_states, INDEX_STATES_BYTES));
     gpuAssert(cudaMalloc((void**)&d_suffixes, SUFFIXES_BYTES));
     gpuAssert(cudaMalloc((void**)&d_state_states, STATE_STATES_BYTES));
-    gpuAssert(cudaMalloc((void**)&d_in, IN_ARRAY_BYTES));
+    I padding = IN_ARRAY_BYTES; // sizeof(uint64_t) - (IN_ARRAY_BYTES % sizeof(uint64_t));
+    gpuAssert(cudaMalloc((void**)&d_in, IN_ARRAY_BYTES + padding));
     gpuAssert(cudaMalloc((void**)&d_index_out, INDEX_OUT_ARRAY_BYTES));
     gpuAssert(cudaMalloc((void**)&d_token_out, TOKEN_OUT_ARRAY_BYTES));
     gpuAssert(cudaMemcpy(d_in, input, IN_ARRAY_BYTES, cudaMemcpyHostToDevice));
