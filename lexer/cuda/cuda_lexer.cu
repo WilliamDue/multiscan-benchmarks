@@ -221,14 +221,14 @@ lexer(LexerCtx ctx,
     volatile __shared__ I indices[ITEMS_PER_THREAD * BLOCK_SIZE];
     volatile __shared__ I indices_aux[BLOCK_SIZE];
     volatile state_t* states_aux = (volatile state_t*) indices;
-    const I REG_MEM = ITEMS_PER_THREAD / sizeof(uint64_t);
+    const I REG_MEM = 1 + (ITEMS_PER_THREAD - 1) / sizeof(uint64_t);
     uint64_t copy_reg[REG_MEM];
     uint8_t *chars_reg = (uint8_t*) copy_reg;
     uint32_t is_produce_state = 0;
 
     uint32_t dyn_index = dynamicIndex<uint32_t>(dyn_index_ptr);
     I glb_offs = dyn_index * BLOCK_SIZE * ITEMS_PER_THREAD;
-    I uint64_glb_offs = dyn_index * BLOCK_SIZE * REG_MEM;
+    I uint64_glb_offs = dyn_index * BLOCK_SIZE * ITEMS_PER_THREAD * REG_MEM;
 
     states_aux[threadIdx.x] = ctx.to_state(threadIdx.x);
 
@@ -270,7 +270,7 @@ lexer(LexerCtx ctx,
         I _gid = glb_offs + sizeof(uint64_t) * lid;
         for (I j = 0; j < sizeof(uint64_t); j++) {
             I gid = _gid + j;
-            if (gid < size) {
+            if (gid < size && lid < ITEMS_PER_THREAD * BLOCK_SIZE) {
                 states[sizeof(uint64_t) * lid + j] = states_aux[chars_reg[sizeof(uint64_t) * i + j]];
             } else {
                 states[sizeof(uint64_t) * lid + j] = IDENTITY;
@@ -332,7 +332,7 @@ void testLexer(uint8_t* input,
     using I = uint32_t;
     const I size = input_size;
     const I BLOCK_SIZE = 256;
-    const I ITEMS_PER_THREAD = 24;
+    const I ITEMS_PER_THREAD = 31;
     const I NUM_LOGICAL_BLOCKS = (size + BLOCK_SIZE * ITEMS_PER_THREAD - 1) / (BLOCK_SIZE * ITEMS_PER_THREAD);
     const I IN_ARRAY_BYTES = size * sizeof(uint8_t);
     const I INDEX_OUT_ARRAY_BYTES = size * sizeof(I);
