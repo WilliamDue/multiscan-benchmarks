@@ -8,7 +8,7 @@ COMPILER?=nvcc
 FLAGS?=-O3 --std=c++14 -diag-suppress 550
 RED=\u001b[31m
 GREEN=\u001b[32m
-DEFAULT=\u001b[10m
+DEFAULT=\u001b[0m
 
 default: bench
 

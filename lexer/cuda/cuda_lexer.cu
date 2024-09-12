@@ -228,20 +228,40 @@ lexer(LexerCtx ctx,
 
     uint32_t dyn_index = dynamicIndex<uint32_t>(dyn_index_ptr);
     I glb_offs = dyn_index * BLOCK_SIZE * ITEMS_PER_THREAD;
-    I uint64_glb_offs = dyn_index * BLOCK_SIZE * ITEMS_PER_THREAD * REG_MEM;
-
+    
     states_aux[threadIdx.x] = ctx.to_state(threadIdx.x);
 
     __syncthreads();
-   
+
+    /*
+    #pragma unroll
+    for (I i = 0; i < ITEMS_PER_THREAD; i++) {
+        I lid = i * blockDim.x + threadIdx.x;
+        I gid = glb_offs + lid;
+        if (gid < size) {
+            chars_reg[i] = d_in[gid];
+        }
+    }
+
+    #pragma unroll
+    for (I i = 0; i < ITEMS_PER_THREAD; i++) {
+        I lid = i * blockDim.x + threadIdx.x;
+        I gid = glb_offs + lid;
+        if (gid < size) {
+            states[lid] = states_aux[chars_reg[i]];
+        } else {
+            states[lid] = IDENTITY;
+        }
+    }
+    */
+
     #pragma unroll
     for (I i = 0; i < REG_MEM; i++) {
         I uint64_lid = i * blockDim.x + threadIdx.x;
-        I uint64_gid = uint64_glb_offs + uint64_lid;
         I lid = sizeof(uint64_t) * uint64_lid;
         I gid = glb_offs + lid;
         if (gid + sizeof(uint64_t) < size) {
-            copy_reg[i] = ((uint64_t*) d_in)[uint64_gid];
+            copy_reg[i] = *((uint64_t*) (gid + (uint8_t*) d_in));
         } else {
             for (I j = 0; j < sizeof(uint64_t); j++) {
                 I loc_gid = gid + j;
@@ -252,28 +272,19 @@ lexer(LexerCtx ctx,
         }
     }
     
-    /*
-    // This works but the code above does not copy it in an ideal manner.
-    #pragma unroll
-    for (I i = 0; i < ITEMS_PER_THREAD; i++) {
-        I lid = i * blockDim.x + threadIdx.x;
-        I gid = glb_offs + lid;
-        if (gid < size) {
-            chars_reg[i] = d_in[gid];
-        }
-    }
-    */
-    
     #pragma unroll
     for (I i = 0; i < REG_MEM; i++) {
         I lid = i * blockDim.x + threadIdx.x;
         I _gid = glb_offs + sizeof(uint64_t) * lid;
         for (I j = 0; j < sizeof(uint64_t); j++) {
             I gid = _gid + j;
-            if (gid < size && lid < ITEMS_PER_THREAD * BLOCK_SIZE) {
-                states[sizeof(uint64_t) * lid + j] = states_aux[chars_reg[sizeof(uint64_t) * i + j]];
-            } else {
-                states[sizeof(uint64_t) * lid + j] = IDENTITY;
+	    I lid_off = sizeof(uint64_t) * lid + j;
+	    I reg_off = sizeof(uint64_t) * i + j;
+	    bool is_in_block = lid_off < ITEMS_PER_THREAD * BLOCK_SIZE; 
+            if (gid < size && is_in_block) {
+                states[lid_off] = states_aux[chars_reg[reg_off]];
+            } else if (is_in_block) {
+                states[lid_off] = IDENTITY;
             }
         }
     }
