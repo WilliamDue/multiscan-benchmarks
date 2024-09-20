@@ -317,25 +317,26 @@ lexer(LexerCtx ctx,
 
     __syncthreads();
 
-    scan<I, I, Add<I>, ITEMS_PER_THREAD>(indices, indices_aux, index_states, Add<I>(), I(), dyn_index);
+    scanBlock<I, I, Add<I>, ITEMS_PER_THREAD>(indices, indices_aux, Add<I>());
+
+    I prefix = decoupledLookbackScanNoWrite<I, I, Add<I>, ITEMS_PER_THREAD>(index_states, indices, Add<I>(), I(), dyn_index);
 
     #pragma unroll
     for (I i = 0; i < ITEMS_PER_THREAD; i++) {
         I lid = blockDim.x * i + threadIdx.x;
         I gid = glb_offs + lid;
         if (gid < size && ((is_produce_state >> i) & 1)) {
-            I offset = indices[lid] - 1;
+            I offset = Add<I>()(prefix, indices[lid]) - 1;
             d_index_out[offset] = gid;
             d_token_out[offset] = get_token(states[lid]);
         }
     }
     
     if (dyn_index == num_logical_blocks - 1 && threadIdx.x == blockDim.x - 1) {
-        *new_size = indices[ITEMS_PER_THREAD * BLOCK_SIZE - 1];
+        *new_size = Add<I>()(prefix, indices[ITEMS_PER_THREAD * BLOCK_SIZE - 1]);
         *is_valid = is_accept(states[ITEMS_PER_THREAD * BLOCK_SIZE - 1]);
     }
 }
-
 
 void testLexer(uint8_t* input,
                size_t input_size,
