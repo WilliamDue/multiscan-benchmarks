@@ -251,6 +251,8 @@ int main() {
     benchMemcpy(131072000);
     std::cout << "\nTesting and Benching Scan on 500MiB of int32: \n";
     testScan<uint32_t>(131072000);
+    std::cout << "\nTesting and Benching Scan on 2GiB of int32: \n";
+    testScan<uint32_t>(524288000);
     std::cout << std::flush;
 
     gpuAssert(cudaPeekAtLastError());

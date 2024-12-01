@@ -14,7 +14,6 @@
     m4
     gperf
     unzip
-    cudatoolkit
     linuxPackages.nvidia_x11
     libGLU libGL
     xorg.libXi xorg.libXmu freeglut
@@ -24,6 +23,9 @@
     # futhark
     gcc12
     binutils
+    ispc
+    cudaPackages.cudatoolkit
+    cudaPackages.markForCudatoolkitRootHook
   ]);
   multiPkgs = pkgs: with pkgs; [ zlib ];
   runScript = "bash";
