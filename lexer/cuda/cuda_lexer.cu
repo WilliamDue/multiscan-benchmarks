@@ -212,10 +212,10 @@ copyFromGlbToShr(
     volatile T* shr
 ) {
     const I ITEMS_PER_THREAD_BYTES = ITEMS_PER_THREAD * sizeof(T);
-    const I TOTAL_ITERS = ITEMS_PER_THREAD_BYTES / sizeof(uint64_t);
+    const I TOTAL_ITERS = 1 + (ITEMS_PER_THREAD_BYTES - 1) / sizeof(uint64_t);
     const I ITERS = 1 + (TOTAL_ITERS - 1) / (ITEMS_PER_THREAD * blockDim.x);
 
-    const I new_size = sizeof(T) * min(ITEMS_PER_THREAD, size - glb_offs);
+    const I new_size = sizeof(T) * min(ITEMS_PER_THREAD * blockDim.x + 1, size - glb_offs);
     
     #pragma unroll
     for (I j = 0; j < ITERS; j++) { 
@@ -224,11 +224,11 @@ copyFromGlbToShr(
             I lid = j * ITEMS_PER_THREAD * blockDim.x + i * blockDim.x + threadIdx.x;
             I lid_byte = lid * sizeof(uint64_t);
             if (lid_byte + sizeof(uint64_t) < new_size) {
-                reinterpret_cast<uint64_t*>(shr)[lid] = reinterpret_cast<volatile uint64_t*>(glb + glb_offs)[lid];
+                reinterpret_cast<volatile uint64_t*>(shr)[lid] = reinterpret_cast<uint64_t*>(glb + glb_offs)[lid];
             } else {
                 #pragma unroll
                 for (I k = lid_byte; k < new_size; k++) {
-                    reinterpret_cast<uint8_t*>(shr)[k] = reinterpret_cast<volatile uint8_t*>(glb + glb_offs)[k];
+                    reinterpret_cast<volatile uint8_t*>(shr)[k] = reinterpret_cast<uint8_t*>(glb + glb_offs)[k];
                 }
             }
         }
@@ -246,10 +246,10 @@ copyFromShrToGlb(
     T* glb
 ) {
     const I ITEMS_PER_THREAD_BYTES = ITEMS_PER_THREAD * sizeof(T);
-    const I TOTAL_ITERS = ITEMS_PER_THREAD_BYTES / sizeof(uint64_t);
+    const I TOTAL_ITERS = 1 + (ITEMS_PER_THREAD_BYTES - 1) / sizeof(uint64_t);
     const I ITERS = 1 + (TOTAL_ITERS - 1) / (ITEMS_PER_THREAD * blockDim.x);
 
-    const I new_size = sizeof(T) * min(ITEMS_PER_THREAD, size - glb_offs);
+    const I new_size = sizeof(T) * min(ITEMS_PER_THREAD * blockDim.x, size - glb_offs);
     
     #pragma unroll
     for (I j = 0; j < ITERS; j++) { 
@@ -358,8 +358,12 @@ lexerTwoKernels2(state_t* d_states_in,
                  volatile uint32_t* dyn_index_ptr,
                  volatile I* new_size,
                  volatile bool* is_valid) {
+    const I STATES_BYTES = sizeof(state_t) * ITEMS_PER_THREAD * BLOCK_SIZE + 1;
+    const I INDICES_AUX_BYTES = sizeof(I) * BLOCK_SIZE;
     volatile __shared__ I indices[ITEMS_PER_THREAD * BLOCK_SIZE];
-    volatile __shared__ I indices_aux[BLOCK_SIZE];
+    volatile __shared__ uint8_t shmem[INDICES_AUX_BYTES < STATES_BYTES ? STATES_BYTES : INDICES_AUX_BYTES];
+    volatile I* indices_aux = (volatile I*) shmem;
+    volatile state_t* states = (volatile state_t*) shmem;
     token_t tokens[ITEMS_PER_THREAD];
     uint32_t is_produce_state = 0;
 
@@ -368,18 +372,20 @@ lexerTwoKernels2(state_t* d_states_in,
 
     __syncthreads();
 
+    copyFromGlbToShr<state_t, I, ITEMS_PER_THREAD>(glb_offs, size, d_states_in, states);
+
     #pragma unroll
     for (I i = 0; i < ITEMS_PER_THREAD; i++) {
         I lid = blockDim.x * i + threadIdx.x;
         I gid = glb_offs + lid;
         bool temp = false;
         if (gid < size) {
-            tokens[i] = get_token(d_states_in[gid]);
-            temp = gid == size - 1 || is_produce(d_states_in[gid + 1]);
+            tokens[i] = get_token(states[lid]);
+            temp = gid == size - 1 || is_produce(states[lid + 1]);
 
             
             if (gid == size - 1) {
-                *is_valid = is_accept(d_states_in[gid]);
+                *is_valid = is_accept(states[lid]);
             }
         }
         is_produce_state |= temp << i;
@@ -940,8 +946,8 @@ void testLexerTwoKernels(uint8_t* input,
     const I STATES_OUT_BYTES = size * sizeof(state_t);
     const I STATE_STATES_BYTES = NUM_LOGICAL_BLOCKS * sizeof(State<state_t>);
     const I INDEX_STATES_BYTES = NUM_LOGICAL_BLOCKS * sizeof(State<I>);
-    const I WARMUP_RUNS = 0; // 500;
-    const I RUNS = 0; // 50;
+    const I WARMUP_RUNS = 500;
+    const I RUNS = 50;
 
     std::vector<token_t> h_token_out(size, 0);
     std::vector<I> h_index_out(size, 0);
@@ -1135,12 +1141,11 @@ int main(int32_t argc, char *argv[]) {
     size_t expected_indices_size = 5;
     */
     printf("%s:\n", argv[1]);
-    /*
+    
     printf(PAD, "Lexer:");
     testLexer(input, input_size, expected_indices, expected_tokens, expected_indices_size);
     printf(PAD, "Lexer Worse Copy:");
     testLexerWorseCopy(input, input_size, expected_indices, expected_tokens, expected_indices_size);
-    */
     printf(PAD, "Lexer Two Kernels:");
     testLexerTwoKernels(input, input_size, expected_indices, expected_tokens, expected_indices_size);
 
