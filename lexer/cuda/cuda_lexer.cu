@@ -212,12 +212,11 @@ copyFromGlbToShr(
     volatile T* shr
 ) {
     const I ITEMS_PER_THREAD_BYTES = ITEMS_PER_THREAD * sizeof(T);
-    const I QOUTIENT_COPY = ITEMS_PER_THREAD_BYTES / sizeof(uint64_t);
-    const I ITERS = 1 + (QOUTIENT_COPY - 1) / ITEMS_PER_THREAD;
+    const I TOTAL_ITERS = ITEMS_PER_THREAD_BYTES / sizeof(uint64_t);
+    const I ITERS = 1 + (TOTAL_ITERS - 1) / (ITEMS_PER_THREAD * blockDim.x);
 
-    T* new_glb = glb + glb_offs;
-    I new_size = sizeof(T) * (size - glb_offs);
-
+    const I new_size = sizeof(T) * min(ITEMS_PER_THREAD, size - glb_offs);
+    
     #pragma unroll
     for (I j = 0; j < ITERS; j++) { 
         #pragma unroll
@@ -225,17 +224,16 @@ copyFromGlbToShr(
             I lid = j * ITEMS_PER_THREAD * blockDim.x + i * blockDim.x + threadIdx.x;
             I lid_byte = lid * sizeof(uint64_t);
             if (lid_byte + sizeof(uint64_t) < new_size) {
-                reinterpret_cast<volatile uint64_t*>(shr)[lid] = reinterpret_cast<uint64_t*>(new_glb)[lid];
+                reinterpret_cast<uint64_t*>(shr)[lid] = reinterpret_cast<volatile uint64_t*>(glb + glb_offs)[lid];
             } else {
                 #pragma unroll
-                for (I k = lid_byte; k < new_size; j++) {
-                    reinterpret_cast<volatile uint8_t*>(shr)[k] = reinterpret_cast<uint8_t*>(new_glb)[k];
+                for (I k = lid_byte; k < new_size; k++) {
+                    reinterpret_cast<uint8_t*>(shr)[k] = reinterpret_cast<volatile uint8_t*>(glb + glb_offs)[k];
                 }
             }
         }
     }
 
-    // Synchronize threads to ensure shared memory consistency
     __syncthreads();
 }
 
@@ -248,8 +246,8 @@ copyFromShrToGlb(
     T* glb
 ) {
     const I ITEMS_PER_THREAD_BYTES = ITEMS_PER_THREAD * sizeof(T);
-    const I QOUTIENT_COPY = ITEMS_PER_THREAD_BYTES / sizeof(uint64_t);
-    const I ITERS = 1 + (QOUTIENT_COPY - 1) / ITEMS_PER_THREAD;
+    const I TOTAL_ITERS = ITEMS_PER_THREAD_BYTES / sizeof(uint64_t);
+    const I ITERS = 1 + (TOTAL_ITERS - 1) / (ITEMS_PER_THREAD * blockDim.x);
 
     const I new_size = sizeof(T) * min(ITEMS_PER_THREAD, size - glb_offs);
     
@@ -263,7 +261,7 @@ copyFromShrToGlb(
                 reinterpret_cast<uint64_t*>(glb + glb_offs)[lid] = reinterpret_cast<volatile uint64_t*>(shr)[lid];
             } else {
                 #pragma unroll
-                for (I k = lid_byte; k < new_size; j++) {
+                for (I k = lid_byte; k < new_size; k++) {
                     reinterpret_cast<uint8_t*>(glb + glb_offs)[k] = reinterpret_cast<volatile uint8_t*>(shr)[k];
                 }
             }
