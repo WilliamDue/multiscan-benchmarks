@@ -350,7 +350,7 @@ lexerWorseCopy(LexerCtx ctx,
       volatile uint32_t* dyn_index_ptr,
       volatile I* new_size,
       volatile bool* is_valid) {
-    volatile __shared__ state_t states[ITEMS_PER_THREAD * BLOCK_SIZE];
+    volatile __shared__ state_t states[ITEMS_PER_THREAD * BLOCK_SIZE + 1];
     volatile __shared__ I indices[ITEMS_PER_THREAD * BLOCK_SIZE];
     volatile __shared__ I indices_aux[BLOCK_SIZE];
     __shared__ state_t next_block_first_state;
@@ -369,20 +369,21 @@ lexerWorseCopy(LexerCtx ctx,
     __syncthreads();
 
     #pragma unroll
-    for (I i = 0; i < ITEMS_PER_THREAD; i++) {
+    for (I i = 0; i < ITEMS_PER_THREAD + 1; i++) {
         I lid = i * blockDim.x + threadIdx.x;
         I gid = glb_offs + lid;
-        if (gid < size) {
+        if (gid < size && lid < ITEMS_PER_THREAD * BLOCK_SIZE + 1) {
             states[lid] = states_aux[d_in[gid]];
-            if (lid == ITEMS_PER_THREAD * BLOCK_SIZE - 1) {
-               next_block_first_state = states_aux[d_in[gid + 1]];
-            }
-        } else {
+        } else if (lid < ITEMS_PER_THREAD * BLOCK_SIZE + 1) {
             states[lid] = IDENTITY;
         }
     }
 
     __syncthreads();
+    
+    if (threadIdx.x == I()) {
+        next_block_first_state = states[ITEMS_PER_THREAD * BLOCK_SIZE];
+    }
 
     scan<state_t, I, LexerCtx, ITEMS_PER_THREAD>(states, states_aux, state_states, ctx, IDENTITY, dyn_index);
 
