@@ -203,6 +203,76 @@ decoupledLookbackScanSuffix(volatile State<T>* states,
     __syncthreads();
 }
 
+template <typename T, typename I, I ITEMS_PER_THREAD>
+__device__ inline void
+copyFromGlbToShr(
+    const I glb_offs,
+    const I size,
+    T* glb,
+    volatile T* shr
+) {
+    const I ITEMS_PER_THREAD_BYTES = ITEMS_PER_THREAD * sizeof(T);
+    const I QOUTIENT_COPY = ITEMS_PER_THREAD_BYTES / sizeof(uint64_t);
+    const I ITERS = 1 + (QOUTIENT_COPY - 1) / ITEMS_PER_THREAD;
+
+    T* new_glb = glb + glb_offs;
+    I new_size = sizeof(T) * (size - glb_offs);
+
+    #pragma unroll
+    for (I j = 0; j < ITERS; j++) { 
+        #pragma unroll
+        for (I i = 0; i < ITEMS_PER_THREAD; i++) {
+            I lid = j * ITEMS_PER_THREAD * blockDim.x + i * blockDim.x + threadIdx.x;
+            I lid_byte = lid * sizeof(uint64_t);
+            if (lid_byte + sizeof(uint64_t) < new_size) {
+                reinterpret_cast<volatile uint64_t*>(shr)[lid] = reinterpret_cast<uint64_t*>(new_glb)[lid];
+            } else {
+                #pragma unroll
+                for (I k = lid_byte; k < new_size; j++) {
+                    reinterpret_cast<volatile uint8_t*>(shr)[k] = reinterpret_cast<uint8_t*>(new_glb)[k];
+                }
+            }
+        }
+    }
+
+    // Synchronize threads to ensure shared memory consistency
+    __syncthreads();
+}
+
+template <typename T, typename I, I ITEMS_PER_THREAD>
+__device__ inline void
+copyFromShrToGlb(
+    const I glb_offs,
+    const I size,
+    volatile T* shr,
+    T* glb
+) {
+    const I ITEMS_PER_THREAD_BYTES = ITEMS_PER_THREAD * sizeof(T);
+    const I QOUTIENT_COPY = ITEMS_PER_THREAD_BYTES / sizeof(uint64_t);
+    const I ITERS = 1 + (QOUTIENT_COPY - 1) / ITEMS_PER_THREAD;
+
+    const I new_size = sizeof(T) * min(ITEMS_PER_THREAD, size - glb_offs);
+    
+    #pragma unroll
+    for (I j = 0; j < ITERS; j++) { 
+        #pragma unroll
+        for (I i = 0; i < ITEMS_PER_THREAD; i++) {
+            I lid = j * ITEMS_PER_THREAD * blockDim.x + i * blockDim.x + threadIdx.x;
+            I lid_byte = lid * sizeof(uint64_t);
+            if (lid_byte + sizeof(uint64_t) < new_size) {
+                reinterpret_cast<uint64_t*>(glb + glb_offs)[lid] = reinterpret_cast<volatile uint64_t*>(shr)[lid];
+            } else {
+                #pragma unroll
+                for (I k = lid_byte; k < new_size; j++) {
+                    reinterpret_cast<uint8_t*>(glb + glb_offs)[k] = reinterpret_cast<volatile uint8_t*>(shr)[k];
+                }
+            }
+        }
+    }
+
+    __syncthreads();
+}
+
 template<typename I, I BLOCK_SIZE, I ITEMS_PER_THREAD>
 __global__ void
 lexerTwoKernels1(LexerCtx ctx,
@@ -265,6 +335,8 @@ lexerTwoKernels1(LexerCtx ctx,
 
     scan<state_t, I, LexerCtx, ITEMS_PER_THREAD>(states, states_aux, state_states, ctx, IDENTITY, dyn_index);
 
+    copyFromShrToGlb<state_t, I, ITEMS_PER_THREAD>(glb_offs, size, states, d_states_out);
+    /*
     #pragma unroll
     for (I i = 0; i < ITEMS_PER_THREAD; i++) {
         I lid = blockDim.x * i + threadIdx.x;
@@ -273,6 +345,8 @@ lexerTwoKernels1(LexerCtx ctx,
             d_states_out[gid] = states[lid];
         }
     }
+    */
+    
 }
 
 template<typename I, I BLOCK_SIZE, I ITEMS_PER_THREAD>
@@ -868,8 +942,8 @@ void testLexerTwoKernels(uint8_t* input,
     const I STATES_OUT_BYTES = size * sizeof(state_t);
     const I STATE_STATES_BYTES = NUM_LOGICAL_BLOCKS * sizeof(State<state_t>);
     const I INDEX_STATES_BYTES = NUM_LOGICAL_BLOCKS * sizeof(State<I>);
-    const I WARMUP_RUNS = 500;
-    const I RUNS = 50;
+    const I WARMUP_RUNS = 0; // 500;
+    const I RUNS = 0; // 50;
 
     std::vector<token_t> h_token_out(size, 0);
     std::vector<I> h_index_out(size, 0);
@@ -1063,10 +1137,12 @@ int main(int32_t argc, char *argv[]) {
     size_t expected_indices_size = 5;
     */
     printf("%s:\n", argv[1]);
+    /*
     printf(PAD, "Lexer:");
     testLexer(input, input_size, expected_indices, expected_tokens, expected_indices_size);
     printf(PAD, "Lexer Worse Copy:");
     testLexerWorseCopy(input, input_size, expected_indices, expected_tokens, expected_indices_size);
+    */
     printf(PAD, "Lexer Two Kernels:");
     testLexerTwoKernels(input, input_size, expected_indices, expected_tokens, expected_indices_size);
 
