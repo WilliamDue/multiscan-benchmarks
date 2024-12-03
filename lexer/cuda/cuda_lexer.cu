@@ -207,15 +207,14 @@ template <typename T, typename I, I ITEMS_PER_THREAD>
 __device__ inline void
 copyFromGlbToShr(
     const I glb_offs,
+    const I num_items,
     const I size,
     T* glb,
     volatile T* shr
 ) {
-    const I ITEMS_PER_THREAD_BYTES = ITEMS_PER_THREAD * sizeof(T);
-    const I TOTAL_ITERS = 1 + (ITEMS_PER_THREAD_BYTES - 1) / sizeof(uint64_t);
+    const I NUM_ITEMS_BYTES = min(num_items, size - glb_offs) * sizeof(T);
+    const I TOTAL_ITERS = 1 + (NUM_ITEMS_BYTES - 1) / sizeof(uint64_t);
     const I ITERS = 1 + (TOTAL_ITERS - 1) / (ITEMS_PER_THREAD * blockDim.x);
-
-    const I new_size = sizeof(T) * min(ITEMS_PER_THREAD * blockDim.x + 1, size - glb_offs);
     
     #pragma unroll
     for (I j = 0; j < ITERS; j++) { 
@@ -223,11 +222,11 @@ copyFromGlbToShr(
         for (I i = 0; i < ITEMS_PER_THREAD; i++) {
             I lid = j * ITEMS_PER_THREAD * blockDim.x + i * blockDim.x + threadIdx.x;
             I lid_byte = lid * sizeof(uint64_t);
-            if (lid_byte + sizeof(uint64_t) < new_size) {
+            if (lid_byte + sizeof(uint64_t) < NUM_ITEMS_BYTES) {
                 reinterpret_cast<volatile uint64_t*>(shr)[lid] = reinterpret_cast<uint64_t*>(glb + glb_offs)[lid];
             } else {
                 #pragma unroll
-                for (I k = lid_byte; k < new_size; k++) {
+                for (I k = lid_byte; k < NUM_ITEMS_BYTES; k++) {
                     reinterpret_cast<volatile uint8_t*>(shr)[k] = reinterpret_cast<uint8_t*>(glb + glb_offs)[k];
                 }
             }
@@ -241,27 +240,26 @@ template <typename T, typename I, I ITEMS_PER_THREAD>
 __device__ inline void
 copyFromShrToGlb(
     const I glb_offs,
+    const I num_items,
     const I size,
     volatile T* shr,
     T* glb
 ) {
-    const I ITEMS_PER_THREAD_BYTES = ITEMS_PER_THREAD * sizeof(T);
-    const I TOTAL_ITERS = 1 + (ITEMS_PER_THREAD_BYTES - 1) / sizeof(uint64_t);
+    const I NUM_ITEMS_BYTES = min(num_items, size - glb_offs) * sizeof(T);
+    const I TOTAL_ITERS = 1 + (NUM_ITEMS_BYTES - 1) / sizeof(uint64_t);
     const I ITERS = 1 + (TOTAL_ITERS - 1) / (ITEMS_PER_THREAD * blockDim.x);
 
-    const I new_size = sizeof(T) * min(ITEMS_PER_THREAD * blockDim.x, size - glb_offs);
-    
     #pragma unroll
     for (I j = 0; j < ITERS; j++) { 
         #pragma unroll
         for (I i = 0; i < ITEMS_PER_THREAD; i++) {
             I lid = j * ITEMS_PER_THREAD * blockDim.x + i * blockDim.x + threadIdx.x;
             I lid_byte = lid * sizeof(uint64_t);
-            if (lid_byte + sizeof(uint64_t) < new_size) {
+            if (lid_byte + sizeof(uint64_t) < NUM_ITEMS_BYTES) {
                 reinterpret_cast<uint64_t*>(glb + glb_offs)[lid] = reinterpret_cast<volatile uint64_t*>(shr)[lid];
             } else {
                 #pragma unroll
-                for (I k = lid_byte; k < new_size; k++) {
+                for (I k = lid_byte; k < NUM_ITEMS_BYTES; k++) {
                     reinterpret_cast<uint8_t*>(glb + glb_offs)[k] = reinterpret_cast<volatile uint8_t*>(shr)[k];
                 }
             }
@@ -333,7 +331,7 @@ lexerTwoKernels1(LexerCtx ctx,
 
     scan<state_t, I, LexerCtx, ITEMS_PER_THREAD>(states, states_aux, state_states, ctx, IDENTITY, dyn_index);
 
-    copyFromShrToGlb<state_t, I, ITEMS_PER_THREAD>(glb_offs, size, states, d_states_out);
+    copyFromShrToGlb<state_t, I, ITEMS_PER_THREAD>(glb_offs, ITEMS_PER_THREAD * blockDim.x, size, states, d_states_out);
     /*
     #pragma unroll
     for (I i = 0; i < ITEMS_PER_THREAD; i++) {
@@ -372,7 +370,7 @@ lexerTwoKernels2(state_t* d_states_in,
 
     __syncthreads();
 
-    copyFromGlbToShr<state_t, I, ITEMS_PER_THREAD>(glb_offs, size, d_states_in, states);
+    copyFromGlbToShr<state_t, I, ITEMS_PER_THREAD>(glb_offs, ITEMS_PER_THREAD * BLOCK_SIZE + 1, size, d_states_in, states);
 
     #pragma unroll
     for (I i = 0; i < ITEMS_PER_THREAD; i++) {
