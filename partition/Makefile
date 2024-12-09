@@ -8,7 +8,7 @@ COMPILER?=nvcc
 FLAGS?=-O3 --std=c++14 -diag-suppress 550 -diag-suppress 20054
 RED=\u001b[31m
 GREEN=\u001b[32m
-DEFAULT=\u001b[10m
+DEFAULT=\033[39m
 
 default: bench
 
@@ -59,10 +59,10 @@ bench: randomints_dense_500MiB.out \
 	   $(DATA_PATH)/randomints_full_500MiB.in \
 	   $(CUDA_PROGRAM) \
 	   $(FUTHARK_PROGRAM)
-	@echo -e "$(RED)=== FUTHARK PARTITION ==="
+	@echo -e "$(RED)=== FUTHARK PARTITION ===$(DEFAULT)"
 	@futhark bench $(FUTHARK_PATH)/$(FUTHARK_PROGRAM).fut --backend=cuda
-	@echo -e "$(RED)==============="
-	@echo -e "$(GREEN)=== CUDA PARTITION ==="
+	@echo -e "$(RED)===============$(DEFAULT)"
+	@echo -e "$(GREEN)=== CUDA PARTITION ===$(DEFAULT)"
 	@./$(CUDA_PROGRAM) $(DATA_PATH)/randomints_full_500MiB.in ./randomints_full_500MiB.out
 	@echo ""
 	@./$(CUDA_PROGRAM) $(DATA_PATH)/randomints_dense_500MiB.in ./randomints_dense_500MiB.out

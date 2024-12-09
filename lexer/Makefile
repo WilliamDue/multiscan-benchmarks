@@ -8,7 +8,7 @@ COMPILER?=nvcc
 FLAGS?=-O3 --std=c++14 -diag-suppress 550
 RED=\u001b[31m
 GREEN=\u001b[32m
-DEFAULT=\u001b[0m
+DEFAULT=\033[39m
 
 default: bench
 
@@ -47,10 +47,10 @@ bench: $(DATA_PATH)/tokens_dense_500MiB.in \
 	   tokens_sparse_500MiB.out \
 	   $(FUTHARK_PROGRAM) \
 	   $(CUDA_PROGRAM)
-	@echo -e "$(RED)=== FUTHARK LEXER ==="
+	@echo -e "$(RED)=== FUTHARK LEXER ===$(DEFAULT)"
 	@futhark bench $(FUTHARK_PATH)/$(FUTHARK_PROGRAM).fut --backend=cuda
-	@echo -e "$(RED)==============="
-	@echo -e "$(GREEN)=== CUDA LEXER ==="
+	@echo -e "$(RED)===============$(DEFAULT)"
+	@echo -e "$(GREEN)=== CUDA LEXER ===$(DEFAULT)"
 	@./$(CUDA_PROGRAM) $(DATA_PATH)/tokens_dense_500MiB.in tokens_dense_500MiB.out
 	@echo ""
 	@./$(CUDA_PROGRAM) $(DATA_PATH)/tokens_moderate_500MiB.in tokens_moderate_500MiB.out

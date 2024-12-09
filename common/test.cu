@@ -108,7 +108,7 @@ spsScan(T* d_in,
 
 void benchMemcpy(size_t size) {
     const size_t WARMUP_RUNS = 50;
-    const size_t RUNS = 10;
+    const size_t RUNS = 500;
     const size_t ARRAY_BYTES = size * sizeof(int);
     int *d_in, *d_out;
 
@@ -152,7 +152,7 @@ void testScan(I size) {
     const I ARRAY_BYTES = size * sizeof(int);
     const I STATES_BYTES = NUM_LOGICAL_BLOCKS * sizeof(State<int>);
     const I WARMUP_RUNS = 1000;
-    const I RUNS = 10;
+    const I RUNS = 500;
 
     char str[1024];
     sprintf(str, "n=%i: ", size);

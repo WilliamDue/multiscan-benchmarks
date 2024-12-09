@@ -5,34 +5,57 @@
 #define gpuAssert(x) _gpuAssert(x, __FILE__, __LINE__)
 
 int timeval_subtract(struct timeval *result, struct timeval *t2, struct timeval *t1) {
-    unsigned int resolution = 1000000;
+    unsigned long resolution = 1000000;
     long int diff = (t2->tv_usec + resolution * t2->tv_sec) - (t1->tv_usec + resolution * t1->tv_sec);
     result->tv_sec = diff / resolution;
     result->tv_usec = diff % resolution;
     return (diff < 0);
 }
 
+long unsigned round_div(unsigned long a, unsigned long b) {
+    return (a + (b / 2)) / b;
+}
+
+// https://en.wikipedia.org/wiki/Integer_square_root
+unsigned long isqrt(unsigned long y) {
+	unsigned long L = 0;
+	unsigned long M;
+	unsigned long R = y + 1;
+
+    while (L != R - 1) {
+        M = L + ((R - L) / 2);
+
+		if (M * M <= y)
+			L = M;
+		else
+			R = M;
+	}
+
+    return L;
+}
+
 void compute_descriptors(timeval* measurements, size_t size, size_t bytes) {   
-    double sample_mean = 0.0;
-    double sample_variance = 0.0;
-    double sample_gbps = 0.0;
+    unsigned long sample_mean = 0;
+    unsigned long sample_variance = 0;
+    double sample_gbpms = 0.0;
     timeval t_diff;
-    double diff;
-    double d_size = (double) size;
+    unsigned long diff;
     
     for (size_t i = 0; i < size; i++) {
         t_diff = measurements[i];
-        diff = t_diff.tv_sec * 1e6 + t_diff.tv_usec;
-        sample_mean += diff / d_size;
-        sample_variance += (diff * diff) / d_size;
-        sample_gbps += bytes / (1000 * d_size * diff);
+        diff = t_diff.tv_sec * 1000000 + t_diff.tv_usec;
+        sample_mean += diff;
+        sample_variance += diff * diff;
+        sample_gbpms += round_div(bytes, diff);
     }
-    double sample_std = sqrt(sample_variance);
-    double bound = (0.95 * sample_std) / sqrt(d_size - 1);
+    sample_mean /= size;
+    sample_variance /= size;
+    unsigned long sample_std = isqrt(sample_variance);
+    double bound = (0.95 * sample_std) / isqrt(size);
 
-    printf("%7.0lfμs ", sample_mean);
+    printf("%7.0lfμs ", (double) sample_mean);
     printf("(95%% CI: [%7.0lfμs, %7.0lfμs]); ", sample_mean - bound, sample_mean + bound);
-    printf("%5.0lfGB/s\n", sample_gbps);
+    printf("%5.0lfGB/s\n", (double) (sample_gbpms / (size * 1000)));
 }
 
 int _gpuAssert(cudaError_t code, const char *fname, int lineno) {

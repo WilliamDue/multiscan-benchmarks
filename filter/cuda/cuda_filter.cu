@@ -6,6 +6,7 @@
 #include "../../common/util.cu.h"
 #include "../../common/data.h"
 #include <unistd.h>
+#define PAD "%-42s "
 
 template<typename I>
 struct Add {
@@ -232,7 +233,7 @@ void testFilter(int32_t* input, size_t input_size, int32_t* expected, size_t exp
     const I ARRAY_BYTES = size * sizeof(int32_t);
     const I STATES_BYTES = NUM_LOGICAL_BLOCKS * sizeof(State<I>);
     const I WARMUP_RUNS = 1000;
-    const I RUNS = 1000;
+    const I RUNS = 500;
     assert(ITEMS_PER_THREAD <= 32);
 
     std::vector<int32_t> h_in(size);
@@ -321,7 +322,7 @@ void testFilterCoalescedWrite(int32_t* input, size_t input_size, int32_t* expect
     const I ARRAY_BYTES = size * sizeof(int32_t);
     const I STATES_BYTES = NUM_LOGICAL_BLOCKS * sizeof(State<I>);
     const I WARMUP_RUNS = 1000;
-    const I RUNS = 1000;
+    const I RUNS = 500;
     assert(ITEMS_PER_THREAD <= 32);
 
     std::vector<int32_t> h_in(size);
@@ -411,7 +412,7 @@ void testFilterFewerShmemWrite(int32_t* input, size_t input_size, int32_t* expec
     const I ARRAY_BYTES = size * sizeof(int32_t);
     const I STATES_BYTES = NUM_LOGICAL_BLOCKS * sizeof(State<I>);
     const I WARMUP_RUNS = 1000;
-    const I RUNS = 1000;
+    const I RUNS = 500;
     assert(ITEMS_PER_THREAD <= 32);
 
     std::vector<int32_t> h_in(size);
@@ -498,7 +499,7 @@ void testFilterCUB(int32_t* input, size_t input_size, int32_t* expected, size_t 
     const I size = input_size;
     const I ARRAY_BYTES = size * sizeof(int32_t);
     const I WARMUP_RUNS = 1000;
-    const I RUNS = 1000;
+    const I RUNS = 500;
     std::vector<int32_t> h_in(size);
     std::vector<int32_t> h_out(size, 0);
 
@@ -575,53 +576,22 @@ void testFilterCUB(int32_t* input, size_t input_size, int32_t* expected, size_t 
 }
 
 int main(int32_t argc, char *argv[]) {
-    assert(argc > 1 && argc % 2 == 0);
-    size_t programs = (argc - 2) / 2;
+    assert(argc == 3);
     size_t input_size;
+    int32_t* input = read_i32_array(argv[1], &input_size);
     size_t expected_size;
-
-    void (*func)(int32_t *, size_t, int32_t *, size_t) = NULL;
-    if (strcmp(argv[1], "filter") == 0) {
-        printf("Filter:\n");
-        func = testFilter;
-    } else if (strcmp(argv[1], "coalesced") == 0) {
-        printf("Filter Coalesced Write:\n");
-        func = testFilterCoalescedWrite;
-    } else if (strcmp(argv[1], "fewer") == 0) {
-        printf("Filter With Fewer Shared Memory Writes:\n");
-        func = testFilterFewerShmemWrite;
-    } else if (strcmp(argv[1], "cub") == 0) {
-        printf("Filter (CUB):\n");
-        func = testFilterCUB;
-    }
-    assert(func != NULL);
-
-    int max_size = 0;
-    for (size_t i = 0; i < programs; i++) {
-        int temp = strlen(argv[2 + 2 * i]);
-        if (max_size < temp) {
-            max_size = temp;
-        }
-    }
-    
-    char format[1024];
-    sprintf(format, "%%-%ds ", max_size + 1);
-
-    for (size_t i = 0; i < programs; i++) {
-        int32_t* input = read_i32_array(argv[2 + 2 * i], &input_size);
-        int32_t* expected = read_i32_array(argv[2 + 2 * i + 1], &expected_size);
-        char temp[1024];
-        sprintf(temp, "%s:", argv[2 + 2 * i]);
-        printf(format, temp);
-        func(input, input_size, expected, expected_size);
-
-        input_size = 0;
-        expected_size = 0;
-        free(expected);
-        free(input);
-    }
-    
-    std::cout << std::flush;
+    int32_t* expected = read_i32_array(argv[2], &expected_size);
+    printf("%s:\n", argv[1]);
+    printf(PAD, "Filter:");
+    testFilter(input, input_size, expected, expected_size);
+    printf(PAD, "Filter Coalesced Write:");
+    testFilterCoalescedWrite(input, input_size, expected, expected_size);
+    printf(PAD, "Filter With Fewer Shared Memory Writes:");
+    testFilterFewerShmemWrite(input, input_size, expected, expected_size);
+    printf(PAD, "Filter (CUB):");
+    testFilterCUB(input, input_size, expected, expected_size);
+    free(input);
+    free(expected);
 
     gpuAssert(cudaPeekAtLastError());
     return 0;

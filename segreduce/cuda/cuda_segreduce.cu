@@ -138,7 +138,7 @@ void testSegreduce(int32_t* vals, bool* flags, size_t _size, int32_t* expected, 
     const I FLAG_ARRAY_BYTES = size * sizeof(bool);
     const I STATES_BYTES = NUM_LOGICAL_BLOCKS * sizeof(State<Tuple<int32_t, I>>);
     const I WARMUP_RUNS = 1000;
-    const I RUNS = 10;
+    const I RUNS = 500;
 
     std::vector<int32_t> h_out(size, 0);
     

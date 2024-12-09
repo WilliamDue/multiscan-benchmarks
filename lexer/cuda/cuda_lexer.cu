@@ -631,7 +631,7 @@ void testLexer(uint8_t* input,
     const I STATE_STATES_BYTES = NUM_LOGICAL_BLOCKS * sizeof(State<state_t>);
     const I INDEX_STATES_BYTES = NUM_LOGICAL_BLOCKS * sizeof(State<I>);
     const I WARMUP_RUNS = 500;
-    const I RUNS = 50;
+    const I RUNS = 100;
 
     std::vector<token_t> h_token_out(size, 0);
     std::vector<I> h_index_out(size, 0);
@@ -788,7 +788,7 @@ void testLexerWorseCopy(uint8_t* input,
     const I STATE_STATES_BYTES = NUM_LOGICAL_BLOCKS * sizeof(State<state_t>);
     const I INDEX_STATES_BYTES = NUM_LOGICAL_BLOCKS * sizeof(State<I>);
     const I WARMUP_RUNS = 500;
-    const I RUNS = 50;
+    const I RUNS = 100;
 
     std::vector<token_t> h_token_out(size, 0);
     std::vector<I> h_index_out(size, 0);
@@ -945,7 +945,7 @@ void testLexerTwoKernels(uint8_t* input,
     const I STATE_STATES_BYTES = NUM_LOGICAL_BLOCKS * sizeof(State<state_t>);
     const I INDEX_STATES_BYTES = NUM_LOGICAL_BLOCKS * sizeof(State<I>);
     const I WARMUP_RUNS = 500;
-    const I RUNS = 50;
+    const I RUNS = 100;
 
     std::vector<token_t> h_token_out(size, 0);
     std::vector<I> h_index_out(size, 0);
