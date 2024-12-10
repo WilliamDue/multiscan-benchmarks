@@ -160,6 +160,11 @@ void testSegreduce(int32_t* vals, bool* flags, size_t _size, int32_t* expected, 
     
     AddTuple<int32_t, I, Add> add = AddTuple<int32_t, I, Add>(Add());
     
+    float * temp = (float *) malloc(sizeof(float) * (WARMUP_RUNS + RUNS));
+    cudaEvent_t start, stop;
+    cudaEventCreate(&start);
+    cudaEventCreate(&stop);
+
     for (I i = 0; i < WARMUP_RUNS; ++i) {
         segreduce<int32_t, I, Add, BLOCK_SIZE, ITEMS_PER_THREAD><<<NUM_LOGICAL_BLOCKS, BLOCK_SIZE>>>(d_in, d_flags, d_out, d_states, size, NUM_LOGICAL_BLOCKS, add, d_dyn_idx_ptr, d_new_size);
         cudaDeviceSynchronize();
@@ -167,18 +172,13 @@ void testSegreduce(int32_t* vals, bool* flags, size_t _size, int32_t* expected, 
         gpuAssert(cudaPeekAtLastError());
     }
 
-    timeval * temp = (timeval *) malloc(sizeof(timeval) * RUNS);
-    timeval prev;
-    timeval curr;
-    timeval t_diff;
-
     for (I i = 0; i < RUNS; ++i) {
-        gettimeofday(&prev, NULL);
+        cudaEventRecord(start, 0);
         segreduce<int32_t, I, Add, BLOCK_SIZE, ITEMS_PER_THREAD><<<NUM_LOGICAL_BLOCKS, BLOCK_SIZE>>>(d_in, d_flags, d_out, d_states, size, NUM_LOGICAL_BLOCKS, add, d_dyn_idx_ptr, d_new_size);
         cudaDeviceSynchronize();
-        gettimeofday(&curr, NULL);
-        timeval_subtract(&t_diff, &curr, &prev);
-        temp[i] = t_diff;
+        cudaEventRecord(stop, 0);
+        cudaEventSynchronize(stop);
+        cudaEventElapsedTime(temp + i, start, stop);
         cudaMemset(d_dyn_idx_ptr, 0, sizeof(uint32_t));
         cudaMemset(d_new_size, 0, sizeof(I));
         gpuAssert(cudaPeekAtLastError());

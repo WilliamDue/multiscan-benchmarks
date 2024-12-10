@@ -658,6 +658,11 @@ void testLexer(uint8_t* input,
     
     LexerCtx ctx = LexerCtx();
 
+    float * temp = (float *) malloc(sizeof(float) * (WARMUP_RUNS + RUNS));
+    cudaEvent_t start, stop;
+    cudaEventCreate(&start);
+    cudaEventCreate(&stop);
+
     for (I i = 0; i < WARMUP_RUNS; ++i) {
         lexer<I, BLOCK_SIZE, ITEMS_PER_THREAD><<<NUM_LOGICAL_BLOCKS, BLOCK_SIZE>>>(
             ctx,
@@ -677,13 +682,8 @@ void testLexer(uint8_t* input,
         gpuAssert(cudaPeekAtLastError());
     }
 
-    timeval * temp = (timeval *) malloc(sizeof(timeval) * RUNS);
-    timeval prev;
-    timeval curr;
-    timeval t_diff;
-
     for (I i = 0; i < RUNS; ++i) {
-        gettimeofday(&prev, NULL);
+        cudaEventRecord(start, 0);
         lexer<I, BLOCK_SIZE, ITEMS_PER_THREAD><<<NUM_LOGICAL_BLOCKS, BLOCK_SIZE>>>(
             ctx,
             d_in,
@@ -698,9 +698,9 @@ void testLexer(uint8_t* input,
             d_is_valid
         );
         cudaDeviceSynchronize();
-        gettimeofday(&curr, NULL);
-        timeval_subtract(&t_diff, &curr, &prev);
-        temp[i] = t_diff;
+        cudaEventRecord(stop, 0);
+        cudaEventSynchronize(stop);
+        cudaEventElapsedTime(temp + i, start, stop);
         cudaMemset(d_dyn_index_ptr, 0, sizeof(uint32_t));
         gpuAssert(cudaPeekAtLastError());
     }
@@ -815,6 +815,11 @@ void testLexerWorseCopy(uint8_t* input,
     
     LexerCtx ctx = LexerCtx();
 
+    float * temp = (float *) malloc(sizeof(float) * (WARMUP_RUNS + RUNS));
+    cudaEvent_t start, stop;
+    cudaEventCreate(&start);
+    cudaEventCreate(&stop);
+
     for (I i = 0; i < WARMUP_RUNS; ++i) {
         lexerWorseCopy<I, BLOCK_SIZE, ITEMS_PER_THREAD><<<NUM_LOGICAL_BLOCKS, BLOCK_SIZE>>>(
             ctx,
@@ -834,13 +839,8 @@ void testLexerWorseCopy(uint8_t* input,
         gpuAssert(cudaPeekAtLastError());
     }
 
-    timeval * temp = (timeval *) malloc(sizeof(timeval) * RUNS);
-    timeval prev;
-    timeval curr;
-    timeval t_diff;
-
     for (I i = 0; i < RUNS; ++i) {
-        gettimeofday(&prev, NULL);
+        cudaEventRecord(start, 0);
         lexerWorseCopy<I, BLOCK_SIZE, ITEMS_PER_THREAD><<<NUM_LOGICAL_BLOCKS, BLOCK_SIZE>>>(
             ctx,
             d_in,
@@ -855,9 +855,9 @@ void testLexerWorseCopy(uint8_t* input,
             d_is_valid
         );
         cudaDeviceSynchronize();
-        gettimeofday(&curr, NULL);
-        timeval_subtract(&t_diff, &curr, &prev);
-        temp[i] = t_diff;
+        cudaEventRecord(stop, 0);
+        cudaEventSynchronize(stop);
+        cudaEventElapsedTime(temp + i, start, stop);
         cudaMemset(d_dyn_index_ptr, 0, sizeof(uint32_t));
         gpuAssert(cudaPeekAtLastError());
     }
@@ -974,6 +974,11 @@ void testLexerTwoKernels(uint8_t* input,
     
     LexerCtx ctx = LexerCtx();
 
+    float * temp = (float *) malloc(sizeof(float) * (WARMUP_RUNS + RUNS));
+    cudaEvent_t start, stop;
+    cudaEventCreate(&start);
+    cudaEventCreate(&stop);
+
     for (I i = 0; i < WARMUP_RUNS; ++i) {
         lexerTwoKernels1<I, BLOCK_SIZE, ITEMS_PER_THREAD><<<NUM_LOGICAL_BLOCKS, BLOCK_SIZE>>>(
             ctx,
@@ -1002,13 +1007,8 @@ void testLexerTwoKernels(uint8_t* input,
         gpuAssert(cudaPeekAtLastError());
     }
 
-    timeval * temp = (timeval *) malloc(sizeof(timeval) * RUNS);
-    timeval prev;
-    timeval curr;
-    timeval t_diff;
-
     for (I i = 0; i < RUNS; ++i) {
-        gettimeofday(&prev, NULL);
+        cudaEventRecord(start, 0);
         lexerTwoKernels1<I, BLOCK_SIZE, ITEMS_PER_THREAD><<<NUM_LOGICAL_BLOCKS, BLOCK_SIZE>>>(
             ctx,
             d_in,
@@ -1032,9 +1032,9 @@ void testLexerTwoKernels(uint8_t* input,
             d_is_valid
         );
         cudaDeviceSynchronize();
-        gettimeofday(&curr, NULL);
-        timeval_subtract(&t_diff, &curr, &prev);
-        temp[i] = t_diff;
+        cudaEventRecord(stop, 0);
+        cudaEventSynchronize(stop);
+        cudaEventElapsedTime(temp + i, start, stop);
         cudaMemset(d_dyn_index_ptr, 0, sizeof(uint32_t));
         gpuAssert(cudaPeekAtLastError());
     }

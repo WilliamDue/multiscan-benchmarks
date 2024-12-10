@@ -255,40 +255,46 @@ void testPartition(int32_t* input, size_t input_size, int32_t* expected, size_t 
 
     Predicate pred;
     cub::TransformInputIterator<I, Predicate, int*> itr(d_in, pred);
+    cudaDeviceSynchronize();
     cub::DeviceReduce::Sum(d_temp_storage, temp_storage_bytes, itr, d_offset, size);
-
+    cudaDeviceSynchronize();
     cudaMalloc(&d_temp_storage, temp_storage_bytes);
-    
+
+    float * temp = (float *) malloc(sizeof(float) * (WARMUP_RUNS + RUNS));
+    cudaEvent_t start, stop;
+    cudaEventCreate(&start);
+    cudaEventCreate(&stop);
+
     for (I i = 0; i < WARMUP_RUNS; ++i) {
         cub::DeviceReduce::Sum(d_temp_storage, temp_storage_bytes, itr, d_offset, size);
+        cudaDeviceSynchronize();
         partition<int32_t, I, Predicate, BLOCK_SIZE, ITEMS_PER_THREAD><<<NUM_LOGICAL_BLOCKS, BLOCK_SIZE>>>(d_in, d_out, d_states, size, NUM_LOGICAL_BLOCKS, pred, d_dyn_idx_ptr, d_offset);
         cudaDeviceSynchronize();
         cudaMemset(d_dyn_idx_ptr, 0, sizeof(uint32_t));
         gpuAssert(cudaPeekAtLastError());
     }
-
-    timeval * temp = (timeval *) malloc(sizeof(timeval) * RUNS);
-    timeval prev;
-    timeval curr;
-    timeval t_diff;
 
     for (I i = 0; i < RUNS; ++i) {
-        gettimeofday(&prev, NULL);
+        cudaEventRecord(start, 0);
         cub::DeviceReduce::Sum(d_temp_storage, temp_storage_bytes, itr, d_offset, size);
+        cudaDeviceSynchronize();
         partition<int32_t, I, Predicate, BLOCK_SIZE, ITEMS_PER_THREAD><<<NUM_LOGICAL_BLOCKS, BLOCK_SIZE>>>(d_in, d_out, d_states, size, NUM_LOGICAL_BLOCKS, pred, d_dyn_idx_ptr, d_offset);
         cudaDeviceSynchronize();
-        gettimeofday(&curr, NULL);
-        timeval_subtract(&t_diff, &curr, &prev);
-        temp[i] = t_diff;
+        cudaEventRecord(stop, 0);
+        cudaEventSynchronize(stop);
+        cudaEventElapsedTime(temp + i, start, stop);
         cudaMemset(d_dyn_idx_ptr, 0, sizeof(uint32_t));
         gpuAssert(cudaPeekAtLastError());
     }
 
-    size_t moved_bytes = 2 * ARRAY_BYTES;
-    
-    free(temp);
+    gpuAssert(cudaPeekAtLastError());
+    cudaEventDestroy(start);
+    cudaEventDestroy(stop);
+
+    size_t moved_bytes = 3 * ARRAY_BYTES;
 
     cub::DeviceReduce::Sum(d_temp_storage, temp_storage_bytes, itr, d_offset, size);
+    cudaDeviceSynchronize();
     partition<int32_t, I, Predicate, BLOCK_SIZE, ITEMS_PER_THREAD><<<NUM_LOGICAL_BLOCKS, BLOCK_SIZE>>>(d_in, d_out, d_states, size, NUM_LOGICAL_BLOCKS, pred, d_dyn_idx_ptr, d_offset);
     cudaDeviceSynchronize();
     gpuAssert(cudaMemcpy(h_out.data(), d_out, ARRAY_BYTES, cudaMemcpyDeviceToHost));
@@ -304,10 +310,10 @@ void testPartition(int32_t* input, size_t input_size, int32_t* expected, size_t 
     }
 
     if (test_passes) {
-        printf(PAD, "Partition:");
         compute_descriptors(temp, RUNS, moved_bytes);
     }
 
+    free(temp);
     gpuAssert(cudaFree(d_in));
     gpuAssert(cudaFree(d_out));
     gpuAssert(cudaFree(d_states));
@@ -355,36 +361,42 @@ void testPartitionCoalescedWrite(int32_t* input, size_t input_size, int32_t* exp
     cub::DeviceReduce::Sum(d_temp_storage, temp_storage_bytes, itr, d_offset, size);
 
     cudaMalloc(&d_temp_storage, temp_storage_bytes);
+
+    float * temp = (float *) malloc(sizeof(float) * RUNS);
+    cudaEvent_t start, stop;
+    cudaEventCreate(&start);
+    cudaEventCreate(&stop);
     
     for (I i = 0; i < WARMUP_RUNS; ++i) {
         cub::DeviceReduce::Sum(d_temp_storage, temp_storage_bytes, itr, d_offset, size);
+        cudaDeviceSynchronize();
         partitionCoalescedWrite<int32_t, I, Predicate, BLOCK_SIZE, ITEMS_PER_THREAD><<<NUM_LOGICAL_BLOCKS, BLOCK_SIZE>>>(d_in, d_out, d_states, size, NUM_LOGICAL_BLOCKS, pred, d_dyn_idx_ptr, d_offset);
         cudaDeviceSynchronize();
         cudaMemset(d_dyn_idx_ptr, 0, sizeof(uint32_t));
         gpuAssert(cudaPeekAtLastError());
     }
-
-    timeval * temp = (timeval *) malloc(sizeof(timeval) * RUNS);
-    timeval prev;
-    timeval curr;
-    timeval t_diff;
 
     for (I i = 0; i < RUNS; ++i) {
-        gettimeofday(&prev, NULL);
+        cudaEventRecord(start, 0);
         cub::DeviceReduce::Sum(d_temp_storage, temp_storage_bytes, itr, d_offset, size);
+        cudaDeviceSynchronize();
         partitionCoalescedWrite<int32_t, I, Predicate, BLOCK_SIZE, ITEMS_PER_THREAD><<<NUM_LOGICAL_BLOCKS, BLOCK_SIZE>>>(d_in, d_out, d_states, size, NUM_LOGICAL_BLOCKS, pred, d_dyn_idx_ptr, d_offset);
         cudaDeviceSynchronize();
-        gettimeofday(&curr, NULL);
-        timeval_subtract(&t_diff, &curr, &prev);
-        temp[i] = t_diff;
+        cudaEventRecord(stop, 0);
+        cudaEventSynchronize(stop);
+        cudaEventElapsedTime(temp + i, start, stop);
         cudaMemset(d_dyn_idx_ptr, 0, sizeof(uint32_t));
         gpuAssert(cudaPeekAtLastError());
     }
 
-    size_t moved_bytes = 2 * ARRAY_BYTES;
+    cudaEventDestroy(start);
+    cudaEventDestroy(stop);
+
+    size_t moved_bytes = 3 * ARRAY_BYTES;
     
 
     cub::DeviceReduce::Sum(d_temp_storage, temp_storage_bytes, itr, d_offset, size);
+    cudaDeviceSynchronize();
     partitionCoalescedWrite<int32_t, I, Predicate, BLOCK_SIZE, ITEMS_PER_THREAD><<<NUM_LOGICAL_BLOCKS, BLOCK_SIZE>>>(d_in, d_out, d_states, size, NUM_LOGICAL_BLOCKS, pred, d_dyn_idx_ptr, d_offset);
     cudaDeviceSynchronize();
     gpuAssert(cudaMemcpy(h_out.data(), d_out, ARRAY_BYTES, cudaMemcpyDeviceToHost));
@@ -400,11 +412,10 @@ void testPartitionCoalescedWrite(int32_t* input, size_t input_size, int32_t* exp
     }
 
     if (test_passes) {
-        printf(PAD, "Partition Coalesced Write:");
         compute_descriptors(temp, RUNS, moved_bytes);
     }
+    
     free(temp);
-
     gpuAssert(cudaFree(d_in));
     gpuAssert(cudaFree(d_out));
     gpuAssert(cudaFree(d_states));
@@ -441,6 +452,11 @@ void testPartitionCUB(int32_t* input, size_t input_size, int32_t* expected, size
     cub::DevicePartition::If(d_temp_storage, temp_storage_bytes, d_in, d_out, d_offset, size, pred);
 
     cudaMalloc(&d_temp_storage, temp_storage_bytes);
+
+    float * temp = (float *) malloc(sizeof(float) * RUNS);
+    cudaEvent_t start, stop;
+    cudaEventCreate(&start);
+    cudaEventCreate(&stop);
     
     for (I i = 0; i < WARMUP_RUNS; ++i) {
         cub::DevicePartition::If(d_temp_storage, temp_storage_bytes, d_in, d_out, d_offset, size, pred);
@@ -448,33 +464,29 @@ void testPartitionCUB(int32_t* input, size_t input_size, int32_t* expected, size
         gpuAssert(cudaPeekAtLastError());
     }
 
-    timeval * temp = (timeval *) malloc(sizeof(timeval) * RUNS);
-    timeval prev;
-    timeval curr;
-    timeval t_diff;
-
     for (I i = 0; i < RUNS; ++i) {
-        gettimeofday(&prev, NULL);
+        cudaEventRecord(start, 0);
         cub::DevicePartition::If(d_temp_storage, temp_storage_bytes, d_in, d_out, d_offset, size, pred);
         cudaDeviceSynchronize();
-        gettimeofday(&curr, NULL);
-        timeval_subtract(&t_diff, &curr, &prev);
-        temp[i] = t_diff;
+        cudaEventRecord(stop, 0);
+        cudaEventSynchronize(stop);
+        cudaEventElapsedTime(temp + i, start, stop);
         gpuAssert(cudaPeekAtLastError());
     }
 
+    cudaEventDestroy(start);
+    cudaEventDestroy(stop);
+
     size_t moved_bytes = 2 * ARRAY_BYTES;
 
-    printf(PAD, "Partition (CUB):");    
     compute_descriptors(temp, RUNS, moved_bytes);
-    free(temp);
 
-    cub::DevicePartition::If(d_temp_storage, temp_storage_bytes, d_in, d_out, d_offset, size, pred);
-    cudaDeviceSynchronize();
+    free(temp);
     gpuAssert(cudaMemcpy(h_out.data(), d_out, ARRAY_BYTES, cudaMemcpyDeviceToHost));
     gpuAssert(cudaFree(d_in));
     gpuAssert(cudaFree(d_out));
     gpuAssert(cudaFree(d_offset));
+    gpuAssert(cudaFree(d_temp_storage));
 }
 
 int main(int32_t argc, char *argv[]) {
@@ -484,8 +496,11 @@ int main(int32_t argc, char *argv[]) {
     size_t expected_size;
     int32_t* expected = read_i32_array(argv[2], &expected_size);
     printf("%s:\n", argv[1]);
+    printf(PAD, "Partition:");
     testPartition(input, input_size, expected, expected_size);
+    printf(PAD, "Partition Coalesced Write:");
     testPartitionCoalescedWrite(input, input_size, expected, expected_size);
+    printf(PAD, "Partition (CUB):");   
     testPartitionCUB(input, input_size, expected, expected_size);
     free(input);
     free(expected);
