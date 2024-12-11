@@ -81,6 +81,49 @@ filter(T* d_in,
 
 template<typename T, typename I, typename PRED, I BLOCK_SIZE, I ITEMS_PER_THREAD>
 __global__ void
+filterTwoKernel1(T* d_in,
+                 I* d_out,
+                 I* d_flags_out,
+                 volatile State<I>* states,
+                 I size,
+                 I num_logical_blocks,
+                 PRED pred,
+                 volatile uint32_t* dyn_idx_ptr) {
+    volatile __shared__ I block[ITEMS_PER_THREAD * BLOCK_SIZE];
+    volatile __shared__ I block_aux[BLOCK_SIZE];
+
+    uint32_t dyn_idx = dynamicIndex<uint32_t>(dyn_idx_ptr);
+    I glb_offs = dyn_idx * BLOCK_SIZE * ITEMS_PER_THREAD;
+
+    #pragma unroll
+    for (I i = 0; i < ITEMS_PER_THREAD; i++) {
+        I lid = i * blockDim.x + threadIdx.x;
+        I gid = glb_offs + lid;
+        if (gid < size) {
+            T elem = d_in[i];
+            I flag = pred(elem);
+            block[lid] = flag;
+            d_flags_out[gid] = flag;
+        } else {
+            block[lid] = 0;
+        }
+    }
+    __syncthreads();
+
+    scan<I, I, Add<I>, ITEMS_PER_THREAD>(block, block_aux, states, Add<I>(), 0, dyn_idx);
+
+    #pragma unroll
+    for (I i = 0; i < ITEMS_PER_THREAD; i++) {
+        I lid = blockDim.x * i + threadIdx.x;
+        I gid = glb_offs + lid;
+        if (gid < size) {
+            d_out[gid] = block[lid];
+        }
+    }
+}
+
+template<typename T, typename I, typename PRED, I BLOCK_SIZE, I ITEMS_PER_THREAD>
+__global__ void
 filterFewerShmemWrite(T* d_in,
                       T* d_out,
                       volatile State<I>* states,
@@ -130,6 +173,7 @@ filterFewerShmemWrite(T* d_in,
     }
     __syncthreads();
 }
+
 
 template<typename T, typename I, typename PRED, I BLOCK_SIZE, I ITEMS_PER_THREAD>
 __global__ void
