@@ -81,6 +81,49 @@ filter(T* d_in,
 
 template<typename T, typename I, typename PRED, I BLOCK_SIZE, I ITEMS_PER_THREAD>
 __global__ void
+filterTwoKernel1(T* d_in,
+                 I* d_out,
+                 I* d_flags_out,
+                 volatile State<I>* states,
+                 I size,
+                 I num_logical_blocks,
+                 PRED pred,
+                 volatile uint32_t* dyn_idx_ptr) {
+    volatile __shared__ I block[ITEMS_PER_THREAD * BLOCK_SIZE];
+    volatile __shared__ I block_aux[BLOCK_SIZE];
+
+    uint32_t dyn_idx = dynamicIndex<uint32_t>(dyn_idx_ptr);
+    I glb_offs = dyn_idx * BLOCK_SIZE * ITEMS_PER_THREAD;
+
+    #pragma unroll
+    for (I i = 0; i < ITEMS_PER_THREAD; i++) {
+        I lid = i * blockDim.x + threadIdx.x;
+        I gid = glb_offs + lid;
+        if (gid < size) {
+            T elem = d_in[i];
+            I flag = pred(elem);
+            block[lid] = flag;
+            d_flags_out[gid] = flag;
+        } else {
+            block[lid] = 0;
+        }
+    }
+    __syncthreads();
+
+    scan<I, I, Add<I>, ITEMS_PER_THREAD>(block, block_aux, states, Add<I>(), 0, dyn_idx);
+
+    #pragma unroll
+    for (I i = 0; i < ITEMS_PER_THREAD; i++) {
+        I lid = blockDim.x * i + threadIdx.x;
+        I gid = glb_offs + lid;
+        if (gid < size) {
+            d_out[gid] = block[lid];
+        }
+    }
+}
+
+template<typename T, typename I, typename PRED, I BLOCK_SIZE, I ITEMS_PER_THREAD>
+__global__ void
 filterFewerShmemWrite(T* d_in,
                       T* d_out,
                       volatile State<I>* states,
@@ -130,6 +173,7 @@ filterFewerShmemWrite(T* d_in,
     }
     __syncthreads();
 }
+
 
 template<typename T, typename I, typename PRED, I BLOCK_SIZE, I ITEMS_PER_THREAD>
 __global__ void
@@ -258,6 +302,11 @@ void testFilter(int32_t* input, size_t input_size, int32_t* expected, size_t exp
     
     Predicate pred = Predicate();
     
+    float * temp = (float *) malloc(sizeof(float) * (WARMUP_RUNS + RUNS));
+    cudaEvent_t start, stop;
+    cudaEventCreate(&start);
+    cudaEventCreate(&stop);
+
     for (I i = 0; i < WARMUP_RUNS; ++i) {
         filter<int32_t, I, Predicate, BLOCK_SIZE, ITEMS_PER_THREAD><<<NUM_LOGICAL_BLOCKS, BLOCK_SIZE>>>(d_in, d_out, d_states, size, NUM_LOGICAL_BLOCKS, pred, d_dyn_idx_ptr, d_new_size);
         cudaDeviceSynchronize();
@@ -265,18 +314,13 @@ void testFilter(int32_t* input, size_t input_size, int32_t* expected, size_t exp
         gpuAssert(cudaPeekAtLastError());
     }
 
-    timeval * temp = (timeval *) malloc(sizeof(timeval) * RUNS);
-    timeval prev;
-    timeval curr;
-    timeval t_diff;
-
     for (I i = 0; i < RUNS; ++i) {
-        gettimeofday(&prev, NULL);
+        cudaEventRecord(start, 0);
         filter<int32_t, I, Predicate, BLOCK_SIZE, ITEMS_PER_THREAD><<<NUM_LOGICAL_BLOCKS, BLOCK_SIZE>>>(d_in, d_out, d_states, size, NUM_LOGICAL_BLOCKS, pred, d_dyn_idx_ptr, d_new_size);
         cudaDeviceSynchronize();
-        gettimeofday(&curr, NULL);
-        timeval_subtract(&t_diff, &curr, &prev);
-        temp[i] = t_diff;
+        cudaEventRecord(stop, 0);
+        cudaEventSynchronize(stop);
+        cudaEventElapsedTime(temp + i, start, stop);
         cudaMemset(d_dyn_idx_ptr, 0, sizeof(uint32_t));
         cudaMemset(d_new_size, 0, sizeof(I));
         gpuAssert(cudaPeekAtLastError());
@@ -347,6 +391,11 @@ void testFilterCoalescedWrite(int32_t* input, size_t input_size, int32_t* expect
     
     Predicate pred = Predicate();
     
+    float * temp = (float *) malloc(sizeof(float) * (WARMUP_RUNS + RUNS));
+    cudaEvent_t start, stop;
+    cudaEventCreate(&start);
+    cudaEventCreate(&stop);
+
     for (I i = 0; i < WARMUP_RUNS; ++i) {
         filterCoalescedWrite<int32_t, I, Predicate, BLOCK_SIZE, ITEMS_PER_THREAD><<<NUM_LOGICAL_BLOCKS, BLOCK_SIZE>>>(d_in, d_out, d_states, size, NUM_LOGICAL_BLOCKS, pred, d_dyn_idx_ptr, d_new_size);
         cudaDeviceSynchronize();
@@ -354,18 +403,13 @@ void testFilterCoalescedWrite(int32_t* input, size_t input_size, int32_t* expect
         gpuAssert(cudaPeekAtLastError());
     }
 
-    timeval * temp = (timeval *) malloc(sizeof(timeval) * RUNS);
-    timeval prev;
-    timeval curr;
-    timeval t_diff;
-
     for (I i = 0; i < RUNS; ++i) {
-        gettimeofday(&prev, NULL);
+        cudaEventRecord(start, 0);
         filterCoalescedWrite<int32_t, I, Predicate, BLOCK_SIZE, ITEMS_PER_THREAD><<<NUM_LOGICAL_BLOCKS, BLOCK_SIZE>>>(d_in, d_out, d_states, size, NUM_LOGICAL_BLOCKS, pred, d_dyn_idx_ptr, d_new_size);
         cudaDeviceSynchronize();
-        gettimeofday(&curr, NULL);
-        timeval_subtract(&t_diff, &curr, &prev);
-        temp[i] = t_diff;
+        cudaEventRecord(stop, 0);
+        cudaEventSynchronize(stop);
+        cudaEventElapsedTime(temp + i, start, stop);
         cudaMemset(d_dyn_idx_ptr, 0, sizeof(uint32_t));
         cudaMemset(d_new_size, 0, sizeof(I));
         gpuAssert(cudaPeekAtLastError());
@@ -437,6 +481,11 @@ void testFilterFewerShmemWrite(int32_t* input, size_t input_size, int32_t* expec
     
     Predicate pred = Predicate();
     
+    float * temp = (float *) malloc(sizeof(float) * (WARMUP_RUNS + RUNS));
+    cudaEvent_t start, stop;
+    cudaEventCreate(&start);
+    cudaEventCreate(&stop);
+
     for (I i = 0; i < WARMUP_RUNS; ++i) {
         filterFewerShmemWrite<int32_t, I, Predicate, BLOCK_SIZE, ITEMS_PER_THREAD><<<NUM_LOGICAL_BLOCKS, BLOCK_SIZE>>>(d_in, d_out, d_states, size, NUM_LOGICAL_BLOCKS, pred, d_dyn_idx_ptr, d_new_size);
         cudaDeviceSynchronize();
@@ -444,18 +493,13 @@ void testFilterFewerShmemWrite(int32_t* input, size_t input_size, int32_t* expec
         gpuAssert(cudaPeekAtLastError());
     }
 
-    timeval * temp = (timeval *) malloc(sizeof(timeval) * RUNS);
-    timeval prev;
-    timeval curr;
-    timeval t_diff;
-
     for (I i = 0; i < RUNS; ++i) {
-        gettimeofday(&prev, NULL);
+        cudaEventRecord(start, 0);
         filterFewerShmemWrite<int32_t, I, Predicate, BLOCK_SIZE, ITEMS_PER_THREAD><<<NUM_LOGICAL_BLOCKS, BLOCK_SIZE>>>(d_in, d_out, d_states, size, NUM_LOGICAL_BLOCKS, pred, d_dyn_idx_ptr, d_new_size);
         cudaDeviceSynchronize();
-        gettimeofday(&curr, NULL);
-        timeval_subtract(&t_diff, &curr, &prev);
-        temp[i] = t_diff;
+        cudaEventRecord(stop, 0);
+        cudaEventSynchronize(stop);
+        cudaEventElapsedTime(temp + i, start, stop);
         cudaMemset(d_dyn_idx_ptr, 0, sizeof(uint32_t));
         cudaMemset(d_new_size, 0, sizeof(I));
         gpuAssert(cudaPeekAtLastError());
@@ -463,8 +507,7 @@ void testFilterFewerShmemWrite(int32_t* input, size_t input_size, int32_t* expec
 
     I temp_size = 0;
     gpuAssert(cudaMemcpy(&temp_size, d_new_size, sizeof(I), cudaMemcpyDeviceToHost));
-    free(temp);
-
+    
     filterFewerShmemWrite<int32_t, I, Predicate, BLOCK_SIZE, ITEMS_PER_THREAD><<<NUM_LOGICAL_BLOCKS, BLOCK_SIZE>>>(d_in, d_out, d_states, size, NUM_LOGICAL_BLOCKS, pred, d_dyn_idx_ptr, d_new_size);
     cudaDeviceSynchronize();
     gpuAssert(cudaMemcpy(h_out.data(), d_out, ARRAY_BYTES, cudaMemcpyDeviceToHost));
@@ -487,6 +530,7 @@ void testFilterFewerShmemWrite(int32_t* input, size_t input_size, int32_t* expec
         compute_descriptors(temp, RUNS, ARRAY_BYTES + temp_size * sizeof(int32_t));
     }
 
+    free(temp);
     gpuAssert(cudaFree(d_in));
     gpuAssert(cudaFree(d_out));
     gpuAssert(cudaFree(d_states));
@@ -523,24 +567,24 @@ void testFilterCUB(int32_t* input, size_t input_size, int32_t* expected, size_t 
 
     cudaMalloc(&d_temp_storage, temp_storage_bytes);
     
+    float * temp = (float *) malloc(sizeof(float) * (WARMUP_RUNS + RUNS));
+    cudaEvent_t start, stop;
+    cudaEventCreate(&start);
+    cudaEventCreate(&stop);
+
     for (I i = 0; i < WARMUP_RUNS; ++i) {
         cub::DeviceSelect::If(d_temp_storage, temp_storage_bytes, d_in, d_out, d_new_size, size, pred);
         cudaDeviceSynchronize();
         gpuAssert(cudaPeekAtLastError());
     }
 
-    timeval * temp = (timeval *) malloc(sizeof(timeval) * RUNS);
-    timeval prev;
-    timeval curr;
-    timeval t_diff;
-
     for (I i = 0; i < RUNS; ++i) {
-        gettimeofday(&prev, NULL);
+        cudaEventRecord(start, 0);
         cub::DeviceSelect::If(d_temp_storage, temp_storage_bytes, d_in, d_out, d_new_size, size, pred);
         cudaDeviceSynchronize();
-        gettimeofday(&curr, NULL);
-        timeval_subtract(&t_diff, &curr, &prev);
-        temp[i] = t_diff;
+        cudaEventRecord(stop, 0);
+        cudaEventSynchronize(stop);
+        cudaEventElapsedTime(temp + i, start, stop);
         cudaMemset(d_new_size, 0, sizeof(I));
         gpuAssert(cudaPeekAtLastError());
     }
@@ -573,6 +617,7 @@ void testFilterCUB(int32_t* input, size_t input_size, int32_t* expected, size_t 
     gpuAssert(cudaFree(d_in));
     gpuAssert(cudaFree(d_out));
     gpuAssert(cudaFree(d_new_size));
+    gpuAssert(cudaFree(d_temp_storage));
 }
 
 int main(int32_t argc, char *argv[]) {
