@@ -4,23 +4,41 @@
 #include <cuda_runtime.h>
 #define gpuAssert(x) _gpuAssert(x, __FILE__, __LINE__)
 
-int timeval_subtract(struct timeval *result, struct timeval *t2, struct timeval *t1) {
-    unsigned long resolution = 1000000;
-    long int diff = (t2->tv_usec + resolution * t2->tv_sec) - (t1->tv_usec + resolution * t1->tv_sec);
-    result->tv_sec = diff / resolution;
-    result->tv_usec = diff % resolution;
-    return (diff < 0);
+
+// https://www.gnu.org/software/libc/manual/html_node/Calculating-Elapsed-Time.html
+int timeval_subtract(struct timeval *result, struct timeval *x, struct timeval *y) {
+    /* Perform the carry for the later subtraction by updating y. */
+    if (x->tv_usec < y->tv_usec) {
+        int nsec = (y->tv_usec - x->tv_usec) / 1000000 + 1;
+        y->tv_usec -= 1000000 * nsec;
+        y->tv_sec += nsec;
+    }
+    if (x->tv_usec - y->tv_usec > 1000000) {
+        int nsec = (x->tv_usec - y->tv_usec) / 1000000;
+        y->tv_usec += 1000000 * nsec;
+        y->tv_sec -= nsec;
+    }
+
+    /* Compute the time remaining to wait.
+    tv_usec is certainly positive. */
+    int temp_sec = x->tv_sec - y->tv_sec;
+    int temp_usec = x->tv_usec - y->tv_usec;
+    result->tv_sec = temp_sec;
+    result->tv_usec = temp_usec;
+
+    /* Return 1 if result is non-positive. */
+    return temp_usec <= 0 || temp_sec <= 0;
 }
 
-long unsigned round_div(unsigned long a, unsigned long b) {
+uint64_t round_div(uint64_t a, uint64_t b) {
     return (a + (b / 2)) / b;
 }
 
 // https://en.wikipedia.org/wiki/Integer_square_root
-unsigned long isqrt(unsigned long y) {
-	unsigned long L = 0;
-	unsigned long M;
-	unsigned long R = y + 1;
+uint64_t isqrt(uint64_t y) {
+	uint64_t L = 0;
+	uint64_t M;
+	uint64_t R = y + 1;
 
     while (L != R - 1) {
         M = L + ((R - L) / 2);
@@ -34,28 +52,35 @@ unsigned long isqrt(unsigned long y) {
     return L;
 }
 
-void compute_descriptors(timeval* measurements, size_t size, size_t bytes) {   
-    unsigned long sample_mean = 0;
-    unsigned long sample_variance = 0;
-    double sample_gbpms = 0.0;
-    timeval t_diff;
-    unsigned long diff;
-    
-    for (size_t i = 0; i < size; i++) {
-        t_diff = measurements[i];
-        diff = t_diff.tv_sec * 1000000 + t_diff.tv_usec;
-        sample_mean += diff;
-        sample_variance += diff * diff;
-        sample_gbpms += round_div(bytes, diff);
-    }
-    sample_mean /= size;
-    sample_variance /= size;
-    unsigned long sample_std = isqrt(sample_variance);
-    double bound = (0.95 * sample_std) / isqrt(size);
+void f(int long unsigned x) {
+    return;
+}
 
-    printf("%7.0lfμs ", (double) sample_mean);
-    printf("(95%% CI: [%7.0lfμs, %7.0lfμs]); ", sample_mean - bound, sample_mean + bound);
-    printf("%5.0lfGB/s\n", (double) (sample_gbpms / (size * 1000)));
+void compute_descriptors(timeval* measurements, size_t size, size_t bytes) {   
+    double sample_mean = 0;
+    double sample_variance = 0;
+    double sample_gbps = 0;
+    size_t new_size = size;
+
+    double d_size = new_size;
+    double d_bytes = bytes;
+    for (size_t i = 0; i < size; i++) {
+        timeval t_diff = measurements[i];
+        int diff = t_diff.tv_sec * 1000000 + t_diff.tv_usec;
+        assert(diff >= 0);
+        double d_diff = diff;
+        sample_mean += d_diff;
+        sample_variance += d_diff * d_diff;
+        sample_gbps += d_bytes / (d_size * 1e3 * d_diff);
+    }
+    sample_mean /= d_size;
+    sample_variance /= d_size;
+    double sample_std = sqrt(sample_variance);
+    double bound = 0.95 * (sample_std / sqrt(size));
+
+    printf("%.0lfμs ", sample_mean);
+    printf("(95%% CI: [%.1lfμs, %.1lfμs]); ", sample_mean - bound, sample_mean + bound);
+    printf("%.0lfGB/s\n",  sample_gbps);
 }
 
 int _gpuAssert(cudaError_t code, const char *fname, int lineno) {

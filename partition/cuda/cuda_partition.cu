@@ -257,10 +257,13 @@ void testPartition(int32_t* input, size_t input_size, int32_t* expected, size_t 
     cub::TransformInputIterator<I, Predicate, int*> itr(d_in, pred);
     cub::DeviceReduce::Sum(d_temp_storage, temp_storage_bytes, itr, d_offset, size);
 
+    cudaDeviceSynchronize();
+
     cudaMalloc(&d_temp_storage, temp_storage_bytes);
-    
+
     for (I i = 0; i < WARMUP_RUNS; ++i) {
         cub::DeviceReduce::Sum(d_temp_storage, temp_storage_bytes, itr, d_offset, size);
+        cudaDeviceSynchronize();
         partition<int32_t, I, Predicate, BLOCK_SIZE, ITEMS_PER_THREAD><<<NUM_LOGICAL_BLOCKS, BLOCK_SIZE>>>(d_in, d_out, d_states, size, NUM_LOGICAL_BLOCKS, pred, d_dyn_idx_ptr, d_offset);
         cudaDeviceSynchronize();
         cudaMemset(d_dyn_idx_ptr, 0, sizeof(uint32_t));
@@ -271,17 +274,23 @@ void testPartition(int32_t* input, size_t input_size, int32_t* expected, size_t 
     timeval prev;
     timeval curr;
     timeval t_diff;
+    size_t i = 0;
 
-    for (I i = 0; i < RUNS; ++i) {
+    while (i < RUNS) {
         gettimeofday(&prev, NULL);
         cub::DeviceReduce::Sum(d_temp_storage, temp_storage_bytes, itr, d_offset, size);
+        cudaDeviceSynchronize();
         partition<int32_t, I, Predicate, BLOCK_SIZE, ITEMS_PER_THREAD><<<NUM_LOGICAL_BLOCKS, BLOCK_SIZE>>>(d_in, d_out, d_states, size, NUM_LOGICAL_BLOCKS, pred, d_dyn_idx_ptr, d_offset);
         cudaDeviceSynchronize();
         gettimeofday(&curr, NULL);
         timeval_subtract(&t_diff, &curr, &prev);
+        if (1 == timeval_subtract(&t_diff, &curr, &prev)) {
+            continue;
+        }
         temp[i] = t_diff;
         cudaMemset(d_dyn_idx_ptr, 0, sizeof(uint32_t));
         gpuAssert(cudaPeekAtLastError());
+        i++;
     }
 
     size_t moved_bytes = 2 * ARRAY_BYTES;
@@ -289,6 +298,7 @@ void testPartition(int32_t* input, size_t input_size, int32_t* expected, size_t 
     free(temp);
 
     cub::DeviceReduce::Sum(d_temp_storage, temp_storage_bytes, itr, d_offset, size);
+    cudaDeviceSynchronize();
     partition<int32_t, I, Predicate, BLOCK_SIZE, ITEMS_PER_THREAD><<<NUM_LOGICAL_BLOCKS, BLOCK_SIZE>>>(d_in, d_out, d_states, size, NUM_LOGICAL_BLOCKS, pred, d_dyn_idx_ptr, d_offset);
     cudaDeviceSynchronize();
     gpuAssert(cudaMemcpy(h_out.data(), d_out, ARRAY_BYTES, cudaMemcpyDeviceToHost));
@@ -353,11 +363,12 @@ void testPartitionCoalescedWrite(int32_t* input, size_t input_size, int32_t* exp
     Predicate pred;
     cub::TransformInputIterator<I, Predicate, int*> itr(d_in, pred);
     cub::DeviceReduce::Sum(d_temp_storage, temp_storage_bytes, itr, d_offset, size);
-
+    cudaDeviceSynchronize();
     cudaMalloc(&d_temp_storage, temp_storage_bytes);
     
     for (I i = 0; i < WARMUP_RUNS; ++i) {
         cub::DeviceReduce::Sum(d_temp_storage, temp_storage_bytes, itr, d_offset, size);
+        cudaDeviceSynchronize();
         partitionCoalescedWrite<int32_t, I, Predicate, BLOCK_SIZE, ITEMS_PER_THREAD><<<NUM_LOGICAL_BLOCKS, BLOCK_SIZE>>>(d_in, d_out, d_states, size, NUM_LOGICAL_BLOCKS, pred, d_dyn_idx_ptr, d_offset);
         cudaDeviceSynchronize();
         cudaMemset(d_dyn_idx_ptr, 0, sizeof(uint32_t));
@@ -368,23 +379,29 @@ void testPartitionCoalescedWrite(int32_t* input, size_t input_size, int32_t* exp
     timeval prev;
     timeval curr;
     timeval t_diff;
+    size_t i = 0;
 
-    for (I i = 0; i < RUNS; ++i) {
+    while (i < RUNS) {
         gettimeofday(&prev, NULL);
         cub::DeviceReduce::Sum(d_temp_storage, temp_storage_bytes, itr, d_offset, size);
+        cudaDeviceSynchronize();
         partitionCoalescedWrite<int32_t, I, Predicate, BLOCK_SIZE, ITEMS_PER_THREAD><<<NUM_LOGICAL_BLOCKS, BLOCK_SIZE>>>(d_in, d_out, d_states, size, NUM_LOGICAL_BLOCKS, pred, d_dyn_idx_ptr, d_offset);
         cudaDeviceSynchronize();
         gettimeofday(&curr, NULL);
-        timeval_subtract(&t_diff, &curr, &prev);
+        if (1 == timeval_subtract(&t_diff, &curr, &prev)) {
+            continue;
+        }
         temp[i] = t_diff;
         cudaMemset(d_dyn_idx_ptr, 0, sizeof(uint32_t));
         gpuAssert(cudaPeekAtLastError());
+        i++;
     }
 
     size_t moved_bytes = 2 * ARRAY_BYTES;
     
 
     cub::DeviceReduce::Sum(d_temp_storage, temp_storage_bytes, itr, d_offset, size);
+    cudaDeviceSynchronize();
     partitionCoalescedWrite<int32_t, I, Predicate, BLOCK_SIZE, ITEMS_PER_THREAD><<<NUM_LOGICAL_BLOCKS, BLOCK_SIZE>>>(d_in, d_out, d_states, size, NUM_LOGICAL_BLOCKS, pred, d_dyn_idx_ptr, d_offset);
     cudaDeviceSynchronize();
     gpuAssert(cudaMemcpy(h_out.data(), d_out, ARRAY_BYTES, cudaMemcpyDeviceToHost));
@@ -439,7 +456,7 @@ void testPartitionCUB(int32_t* input, size_t input_size, int32_t* expected, size
 
     Predicate pred;
     cub::DevicePartition::If(d_temp_storage, temp_storage_bytes, d_in, d_out, d_offset, size, pred);
-
+    cudaDeviceSynchronize();
     cudaMalloc(&d_temp_storage, temp_storage_bytes);
     
     for (I i = 0; i < WARMUP_RUNS; ++i) {
