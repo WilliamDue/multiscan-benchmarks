@@ -100,7 +100,7 @@ filterTwoKernel1(T* d_in,
         I lid = i * blockDim.x + threadIdx.x;
         I gid = glb_offs + lid;
         if (gid < size) {
-            T elem = d_in[i];
+            T elem = d_in[gid];
             I flag = pred(elem);
             block[lid] = flag;
             d_flags_out[gid] = flag;
@@ -505,7 +505,7 @@ void testFilterFewerShmemWrite(int32_t* input, size_t input_size, int32_t* expec
     using I = uint32_t;
     const I size = input_size;
     const I BLOCK_SIZE = 256;
-    const I ITEMS_PER_THREAD = 30;
+    const I ITEMS_PER_THREAD = 15;
     const I NUM_LOGICAL_BLOCKS = (size + BLOCK_SIZE * ITEMS_PER_THREAD - 1) / (BLOCK_SIZE * ITEMS_PER_THREAD);
     const I ARRAY_BYTES = size * sizeof(int32_t);
     const I STATES_BYTES = NUM_LOGICAL_BLOCKS * sizeof(State<I>);
@@ -791,7 +791,7 @@ void testFilterTwoKernels(int32_t* input, size_t input_size, int32_t* expected, 
     cudaDeviceSynchronize();
     gpuAssert(cudaMemcpy(h_out.data(), d_out, ARRAY_BYTES, cudaMemcpyDeviceToHost));
     gpuAssert(cudaMemcpy(h_offsets.data(), d_offsets, OFFSETS_BYTES, cudaMemcpyDeviceToHost));
-    temp_size = h_offsets[size - 1];
+    temp_size = h_offsets[(I) size - 1];
     
     bool test_passes = temp_size == expected_size;
     if (!test_passes) {
@@ -827,7 +827,6 @@ int main(int32_t argc, char *argv[]) {
     size_t expected_size;
     int32_t* expected = read_i32_array(argv[2], &expected_size);
     printf("%s:\n", argv[1]);
-    /*
     printf(PAD, "Filter:");
     testFilter(input, input_size, expected, expected_size);
     printf(PAD, "Filter Coalesced Write:");
@@ -836,9 +835,9 @@ int main(int32_t argc, char *argv[]) {
     testFilterFewerShmemWrite(input, input_size, expected, expected_size);
     printf(PAD, "Filter (CUB):");
     testFilterCUB(input, input_size, expected, expected_size);
-    */
     printf(PAD, "Filter Two Kernels:");
     testFilterTwoKernels(input, input_size, expected, expected_size);
+    
     free(input);
     free(expected);
 
