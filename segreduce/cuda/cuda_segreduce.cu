@@ -160,7 +160,7 @@ void testSegreduce(int32_t* vals, bool* flags, size_t _size, int32_t* expected, 
     
     AddTuple<int32_t, I, Add> add = AddTuple<int32_t, I, Add>(Add());
     
-    float * temp = (float *) malloc(sizeof(float) * (WARMUP_RUNS + RUNS));
+    float * temp = (float *) malloc(sizeof(float) * RUNS);
     cudaEvent_t start, stop;
     cudaEventCreate(&start);
     cudaEventCreate(&stop);

@@ -17,7 +17,7 @@ in
     gperf
     unzip
     cudatoolkit
-    futhark
+    # futhark
     cudaPackages.cuda_cudart
     cudaPackages.cuda_nvcc
     (lib.getLib cudaPackages.cuda_nvrtc)

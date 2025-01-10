@@ -260,7 +260,7 @@ void testPartition(int32_t* input, size_t input_size, int32_t* expected, size_t 
     cudaDeviceSynchronize();
     cudaMalloc(&d_temp_storage, temp_storage_bytes);
 
-    float * temp = (float *) malloc(sizeof(float) * (WARMUP_RUNS + RUNS));
+    float * temp = (float *) malloc(sizeof(float) * RUNS);
     cudaEvent_t start, stop;
     cudaEventCreate(&start);
     cudaEventCreate(&stop);

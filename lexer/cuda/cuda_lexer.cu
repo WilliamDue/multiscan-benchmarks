@@ -658,7 +658,7 @@ void testLexer(uint8_t* input,
     
     LexerCtx ctx = LexerCtx();
 
-    float * temp = (float *) malloc(sizeof(float) * (WARMUP_RUNS + RUNS));
+    float * temp = (float *) malloc(sizeof(float) * RUNS);
     cudaEvent_t start, stop;
     cudaEventCreate(&start);
     cudaEventCreate(&stop);
@@ -815,7 +815,7 @@ void testLexerWorseCopy(uint8_t* input,
     
     LexerCtx ctx = LexerCtx();
 
-    float * temp = (float *) malloc(sizeof(float) * (WARMUP_RUNS + RUNS));
+    float * temp = (float *) malloc(sizeof(float) * RUNS);
     cudaEvent_t start, stop;
     cudaEventCreate(&start);
     cudaEventCreate(&stop);
@@ -974,7 +974,7 @@ void testLexerTwoKernels(uint8_t* input,
     
     LexerCtx ctx = LexerCtx();
 
-    float * temp = (float *) malloc(sizeof(float) * (WARMUP_RUNS + RUNS));
+    float * temp = (float *) malloc(sizeof(float) * RUNS);
     cudaEvent_t start, stop;
     cudaEventCreate(&start);
     cudaEventCreate(&stop);

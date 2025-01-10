@@ -122,6 +122,60 @@ filterTwoKernel1(T* d_in,
     }
 }
 
+template<typename T, typename I, I BLOCK_SIZE, I ITEMS_PER_THREAD>
+__global__ void
+filterTwoKernel2(T* d_in,
+                 I* d_flags,
+                 I* d_offset,
+                 T* d_out,
+                 I size) {
+    volatile __shared__ T elem_block[ITEMS_PER_THREAD * BLOCK_SIZE];
+    volatile __shared__ I flags_block[ITEMS_PER_THREAD * BLOCK_SIZE];
+    volatile __shared__ I d_offset_block[ITEMS_PER_THREAD * BLOCK_SIZE];
+    I glb_offs = blockIdx.x * BLOCK_SIZE * ITEMS_PER_THREAD;
+
+    #pragma unroll
+    for (I i = 0; i < ITEMS_PER_THREAD; i++) {
+        I lid = i * blockDim.x + threadIdx.x;
+        I gid = glb_offs + lid;
+        if (gid < size) {
+            flags_block[lid] = d_flags[gid];
+        } else {
+            flags_block[lid] = false;
+        }
+    }
+    __syncthreads();
+
+    #pragma unroll
+    for (I i = 0; i < ITEMS_PER_THREAD; i++) {
+        I lid = i * blockDim.x + threadIdx.x;
+        I gid = glb_offs + lid;
+        if (gid < size) {
+            elem_block[lid] = d_in[gid];
+        }
+    }
+    __syncthreads();
+
+    #pragma unroll
+    for (I i = 0; i < ITEMS_PER_THREAD; i++) {
+        I lid = i * blockDim.x + threadIdx.x;
+        I gid = glb_offs + lid;
+        if (gid < size) {
+            d_offset_block[lid] = d_offset[gid];
+        }
+    }
+    __syncthreads();
+
+    #pragma unroll
+    for (I i = 0; i < ITEMS_PER_THREAD; i++) {
+        I lid = blockDim.x * i + threadIdx.x;
+        I gid = glb_offs + lid;
+        if (gid < size && flags_block[lid]) {
+            d_out[d_offset_block[lid] - 1] = elem_block[lid];
+        }
+    }
+}
+
 template<typename T, typename I, typename PRED, I BLOCK_SIZE, I ITEMS_PER_THREAD>
 __global__ void
 filterFewerShmemWrite(T* d_in,
@@ -302,7 +356,7 @@ void testFilter(int32_t* input, size_t input_size, int32_t* expected, size_t exp
     
     Predicate pred = Predicate();
     
-    float * temp = (float *) malloc(sizeof(float) * (WARMUP_RUNS + RUNS));
+    float * temp = (float *) malloc(sizeof(float) * RUNS);
     cudaEvent_t start, stop;
     cudaEventCreate(&start);
     cudaEventCreate(&stop);
@@ -391,7 +445,7 @@ void testFilterCoalescedWrite(int32_t* input, size_t input_size, int32_t* expect
     
     Predicate pred = Predicate();
     
-    float * temp = (float *) malloc(sizeof(float) * (WARMUP_RUNS + RUNS));
+    float * temp = (float *) malloc(sizeof(float) * RUNS);
     cudaEvent_t start, stop;
     cudaEventCreate(&start);
     cudaEventCreate(&stop);
@@ -481,7 +535,7 @@ void testFilterFewerShmemWrite(int32_t* input, size_t input_size, int32_t* expec
     
     Predicate pred = Predicate();
     
-    float * temp = (float *) malloc(sizeof(float) * (WARMUP_RUNS + RUNS));
+    float * temp = (float *) malloc(sizeof(float) * RUNS);
     cudaEvent_t start, stop;
     cudaEventCreate(&start);
     cudaEventCreate(&stop);
@@ -567,7 +621,7 @@ void testFilterCUB(int32_t* input, size_t input_size, int32_t* expected, size_t 
 
     cudaMalloc(&d_temp_storage, temp_storage_bytes);
     
-    float * temp = (float *) malloc(sizeof(float) * (WARMUP_RUNS + RUNS));
+    float * temp = (float *) malloc(sizeof(float) * RUNS);
     cudaEvent_t start, stop;
     cudaEventCreate(&start);
     cudaEventCreate(&stop);
@@ -620,6 +674,152 @@ void testFilterCUB(int32_t* input, size_t input_size, int32_t* expected, size_t 
     gpuAssert(cudaFree(d_temp_storage));
 }
 
+void testFilterTwoKernels(int32_t* input, size_t input_size, int32_t* expected, size_t expected_size) {
+    using I = uint32_t;
+    const I size = input_size;
+    const I BLOCK_SIZE = 256;
+    const I ITEMS_PER_THREAD = 4;
+    const I NUM_LOGICAL_BLOCKS = (size + BLOCK_SIZE * ITEMS_PER_THREAD - 1) / (BLOCK_SIZE * ITEMS_PER_THREAD);
+    const I ARRAY_BYTES = size * sizeof(int32_t);
+    const I OFFSETS_BYTES = size * sizeof(I);
+    const I FLAGS_BYTES = size * sizeof(I);
+    const I STATES_BYTES = NUM_LOGICAL_BLOCKS * sizeof(State<I>);
+    const I WARMUP_RUNS = 1000;
+    const I RUNS = 500;
+    assert(ITEMS_PER_THREAD <= 32);
+
+    std::vector<int32_t> h_in(size);
+    std::vector<int32_t> h_out(size, 0);
+    std::vector<I> h_offsets(size, 0);
+
+    for (I i = 0; i < size; ++i) {
+        h_in[i] = input[i];
+    }
+    
+    uint32_t* d_dyn_idx_ptr;
+    I* d_flags;
+    I* d_offsets;
+    int32_t *d_in, *d_out;
+    State<I>* d_states;
+    gpuAssert(cudaMalloc((void**)&d_dyn_idx_ptr, sizeof(uint32_t)));
+    cudaMemset(d_dyn_idx_ptr, 0, sizeof(uint32_t));
+    gpuAssert(cudaMalloc((void**)&d_states, STATES_BYTES));
+    gpuAssert(cudaMalloc((void**)&d_in, ARRAY_BYTES));
+    gpuAssert(cudaMalloc((void**)&d_out, ARRAY_BYTES));
+    gpuAssert(cudaMalloc((void**)&d_flags, FLAGS_BYTES));
+    gpuAssert(cudaMalloc((void**)&d_offsets, OFFSETS_BYTES));
+    
+    gpuAssert(cudaMemcpy(d_in, h_in.data(), ARRAY_BYTES, cudaMemcpyHostToDevice));
+    
+    Predicate pred = Predicate();
+    
+    float * temp = (float *) malloc(sizeof(float) * RUNS);
+    cudaEvent_t start, stop;
+    cudaEventCreate(&start);
+    cudaEventCreate(&stop);
+
+    for (I i = 0; i < WARMUP_RUNS; ++i) {
+        filterTwoKernel1<int32_t, I, Predicate, BLOCK_SIZE, ITEMS_PER_THREAD><<<NUM_LOGICAL_BLOCKS, BLOCK_SIZE>>>(
+            d_in,
+            d_offsets,
+            d_flags,
+            d_states,
+            size,
+            NUM_LOGICAL_BLOCKS,
+            pred,
+            d_dyn_idx_ptr
+        );
+        cudaDeviceSynchronize();
+        filterTwoKernel2<int32_t, I, BLOCK_SIZE, ITEMS_PER_THREAD><<<NUM_LOGICAL_BLOCKS, BLOCK_SIZE>>>(
+            d_in,
+            d_flags,
+            d_offsets,
+            d_out,
+            size
+        );
+        cudaMemset(d_dyn_idx_ptr, 0, sizeof(uint32_t));
+        gpuAssert(cudaPeekAtLastError());
+    }
+
+    for (I i = 0; i < RUNS; ++i) {
+        cudaEventRecord(start, 0);
+        filterTwoKernel1<int32_t, I, Predicate, BLOCK_SIZE, ITEMS_PER_THREAD><<<NUM_LOGICAL_BLOCKS, BLOCK_SIZE>>>(
+            d_in,
+            d_offsets,
+            d_flags,
+            d_states,
+            size,
+            NUM_LOGICAL_BLOCKS,
+            pred,
+            d_dyn_idx_ptr
+        );
+        cudaDeviceSynchronize();
+        filterTwoKernel2<int32_t, I, BLOCK_SIZE, ITEMS_PER_THREAD><<<NUM_LOGICAL_BLOCKS, BLOCK_SIZE>>>(
+            d_in,
+            d_flags,
+            d_offsets,
+            d_out,
+            size
+        );
+        cudaDeviceSynchronize();
+        cudaEventRecord(stop, 0);
+        cudaEventSynchronize(stop);
+        cudaEventElapsedTime(temp + i, start, stop);
+        cudaMemset(d_dyn_idx_ptr, 0, sizeof(uint32_t));
+        gpuAssert(cudaPeekAtLastError());
+    }
+
+    I temp_size = 0;
+    filterTwoKernel1<int32_t, I, Predicate, BLOCK_SIZE, ITEMS_PER_THREAD><<<NUM_LOGICAL_BLOCKS, BLOCK_SIZE>>>(
+        d_in,
+        d_offsets,
+        d_flags,
+        d_states,
+        size,
+        NUM_LOGICAL_BLOCKS,
+        pred,
+        d_dyn_idx_ptr
+    );
+    cudaDeviceSynchronize();
+    filterTwoKernel2<int32_t, I, BLOCK_SIZE, ITEMS_PER_THREAD><<<NUM_LOGICAL_BLOCKS, BLOCK_SIZE>>>(
+        d_in,
+        d_flags,
+        d_offsets,
+        d_out,
+        size
+    );
+    cudaDeviceSynchronize();
+    gpuAssert(cudaMemcpy(h_out.data(), d_out, ARRAY_BYTES, cudaMemcpyDeviceToHost));
+    gpuAssert(cudaMemcpy(h_offsets.data(), d_offsets, OFFSETS_BYTES, cudaMemcpyDeviceToHost));
+    temp_size = h_offsets[size - 1];
+    
+    bool test_passes = temp_size == expected_size;
+    if (!test_passes) {
+        std::cout << "Filter Test Failed: Expected size=" << expected_size << " but got size=" << temp_size << ".\n";
+    } else {
+        for (I i = 0; i < expected_size; ++i) {
+            test_passes &= h_out[i] == expected[i];
+
+            if (!test_passes) {
+                std::cout << "Filter Test Failed: Due to elements mismatch at index=" << i << ".\n";
+            }
+        } 
+    }
+
+    if (test_passes) {
+        compute_descriptors(temp, RUNS, ARRAY_BYTES + temp_size * sizeof(int32_t));
+    }
+
+    free(temp);
+    gpuAssert(cudaFree(d_in));
+    gpuAssert(cudaFree(d_flags));
+    gpuAssert(cudaFree(d_offsets));
+    gpuAssert(cudaFree(d_out));
+    gpuAssert(cudaFree(d_states));
+    gpuAssert(cudaFree(d_dyn_idx_ptr));
+}
+
+
 int main(int32_t argc, char *argv[]) {
     assert(argc == 3);
     size_t input_size;
@@ -627,6 +827,7 @@ int main(int32_t argc, char *argv[]) {
     size_t expected_size;
     int32_t* expected = read_i32_array(argv[2], &expected_size);
     printf("%s:\n", argv[1]);
+    /*
     printf(PAD, "Filter:");
     testFilter(input, input_size, expected, expected_size);
     printf(PAD, "Filter Coalesced Write:");
@@ -635,6 +836,9 @@ int main(int32_t argc, char *argv[]) {
     testFilterFewerShmemWrite(input, input_size, expected, expected_size);
     printf(PAD, "Filter (CUB):");
     testFilterCUB(input, input_size, expected, expected_size);
+    */
+    printf(PAD, "Filter Two Kernels:");
+    testFilterTwoKernels(input, input_size, expected, expected_size);
     free(input);
     free(expected);
 
