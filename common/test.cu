@@ -1,6 +1,7 @@
 #include <iostream>
 #include <vector>
 #include <cuda_runtime.h>
+#include <cub/cub.cuh>
 #include "sps.cu.h"
 #include "util.cu.h"
 #define PAD "%-38s "
@@ -115,24 +116,29 @@ void benchMemcpy(size_t size) {
     gpuAssert(cudaMalloc((void**)&d_in, ARRAY_BYTES));
     gpuAssert(cudaMalloc((void**)&d_out, ARRAY_BYTES));
 
+    float * temp = (float *) malloc(sizeof(float) * RUNS);
+    cudaEvent_t start, stop;
+    cudaEventCreate(&start);
+    cudaEventCreate(&stop);
+
     for (size_t i = 0; i < WARMUP_RUNS; ++i) {
         cudaMemcpy(d_out, d_in, size, cudaMemcpyDeviceToDevice);
         cudaDeviceSynchronize();
+        gpuAssert(cudaPeekAtLastError());
     }
-
-    timeval * temp = (timeval *) malloc(sizeof(timeval) * RUNS);
-    timeval prev; 
-    timeval curr;
-    timeval t_diff;
 
     for (size_t i = 0; i < RUNS; ++i) {
-        gettimeofday(&prev, NULL);
+        cudaEventRecord(start, 0);
         cudaMemcpy(d_out, d_in, ARRAY_BYTES, cudaMemcpyDeviceToDevice);
         cudaDeviceSynchronize();
-        gettimeofday(&curr, NULL);
-        timeval_subtract(&t_diff, &curr, &prev);
-        temp[i] = t_diff;
+        cudaEventRecord(stop, 0);
+        cudaEventSynchronize(stop);
+        cudaEventElapsedTime(temp + i, start, stop);
+        gpuAssert(cudaPeekAtLastError());
     }
+
+    cudaEventDestroy(start);
+    cudaEventDestroy(stop);
     
     char str[1024];
     sprintf(str, "n=%i: ", size);
@@ -177,27 +183,31 @@ void testScan(I size) {
     gpuAssert(cudaMemcpy(d_in, h_in.data(), ARRAY_BYTES, cudaMemcpyHostToDevice));
 
     Add op = Add();
-    
+
+    float * temp = (float *) malloc(sizeof(float) * RUNS);
+    cudaEvent_t start, stop;
+    cudaEventCreate(&start);
+    cudaEventCreate(&stop);
+
     for (I i = 0; i < WARMUP_RUNS; ++i) {
         spsScan<int, I, Add, BLOCK_SIZE, ITEMS_PER_THREAD><<<NUM_LOGICAL_BLOCKS, BLOCK_SIZE>>>(d_in, d_out, d_states, size, op, 0, d_dyn_idx_ptr);
         cudaDeviceSynchronize();
+        gpuAssert(cudaPeekAtLastError());
         cudaMemset(d_dyn_idx_ptr, 0, sizeof(uint32_t));
     }
-
-    timeval * temp = (timeval *) malloc(sizeof(timeval) * RUNS);
-    timeval prev;
-    timeval curr;
-    timeval t_diff;
 
     for (I i = 0; i < RUNS; ++i) {
-        gettimeofday(&prev, NULL);
+        cudaEventRecord(start, 0);
         spsScan<int, I, Add, BLOCK_SIZE, ITEMS_PER_THREAD><<<NUM_LOGICAL_BLOCKS, BLOCK_SIZE>>>(d_in, d_out, d_states, size, op, 0, d_dyn_idx_ptr);
         cudaDeviceSynchronize();
-        gettimeofday(&curr, NULL);
-        timeval_subtract(&t_diff, &curr, &prev);
-        temp[i] = t_diff;
+        cudaEventRecord(stop, 0);
+        cudaEventSynchronize(stop);
+        cudaEventElapsedTime(temp + i, start, stop);
+        gpuAssert(cudaPeekAtLastError());
         cudaMemset(d_dyn_idx_ptr, 0, sizeof(uint32_t));
     }
+    cudaEventDestroy(start);
+    cudaEventDestroy(stop);
 
     spsScan<int, I, Add, BLOCK_SIZE, ITEMS_PER_THREAD><<<NUM_LOGICAL_BLOCKS, BLOCK_SIZE>>>(d_in, d_out, d_states, size, op, 0, d_dyn_idx_ptr);
     cudaDeviceSynchronize();

@@ -285,7 +285,6 @@ void testPartition(int32_t* input, size_t input_size, int32_t* expected, size_t 
         cudaEventElapsedTime(temp + i, start, stop);
         cudaMemset(d_dyn_idx_ptr, 0, sizeof(uint32_t));
         gpuAssert(cudaPeekAtLastError());
-        i++;
     }
 
     gpuAssert(cudaPeekAtLastError());
@@ -388,7 +387,6 @@ void testPartitionCoalescedWrite(int32_t* input, size_t input_size, int32_t* exp
         cudaEventElapsedTime(temp + i, start, stop);
         cudaMemset(d_dyn_idx_ptr, 0, sizeof(uint32_t));
         gpuAssert(cudaPeekAtLastError());
-        i++;
     }
 
     cudaEventDestroy(start);

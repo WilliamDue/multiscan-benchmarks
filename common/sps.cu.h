@@ -37,7 +37,7 @@ shmemToGlbCpy(const I glb_offs,
 }
 
 template<typename T, typename I, typename OP, I ITEMS_PER_THREAD>
-__device__ inline T
+__device__ inline void
 scanThread(volatile T* shmem,
            volatile T* shmem_aux,
            OP op) {
@@ -70,7 +70,7 @@ scanWarp(volatile T* shmem,
 }
 
 template<typename T, typename I, typename OP>
-__device__ inline T
+__device__ inline void
 scanBlock(volatile T* shmem,
           OP op) {
     const uint8_t lane = threadIdx.x & (WARP - 1);
