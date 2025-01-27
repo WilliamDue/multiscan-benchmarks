@@ -240,29 +240,29 @@ int main() {
     info();
     
     std::cout << "Testing Block Wide Scan:\n";
-    testBlocks<uint32_t>(1 << 6);
-    testBlocks<uint32_t>(1 << 16);
-    testBlocks<uint32_t>(1 << 26);
+    testBlocks<uint64_t>(1 << 6);
+    testBlocks<uint64_t>(1 << 16);
+    testBlocks<uint64_t>(1 << 26);
 
-    testBlocks<uint32_t>(1000);
-    testBlocks<uint32_t>(100000);
-    testBlocks<uint32_t>(10000000);
+    testBlocks<uint64_t>(1000);
+    testBlocks<uint64_t>(100000);
+    testBlocks<uint64_t>(10000000);
     std::cout << "\n";
     
     std::cout << "Testing and Benching Device Wide Single Pass Scan: \n";
-    testScan<uint32_t>(1 << 8);
-    testScan<uint32_t>(1 << 16);
-    testScan<uint32_t>(1 << 26);
-    testScan<uint32_t>(1000);
-    testScan<uint32_t>(100000);
-    testScan<uint32_t>(100000000);
+    testScan<uint64_t>(1 << 8);
+    testScan<uint64_t>(1 << 16);
+    testScan<uint64_t>(1 << 26);
+    testScan<uint64_t>(1000);
+    testScan<uint64_t>(100000);
+    testScan<uint64_t>(100000000);
 
     std::cout << "\nBenching cudaMemcpy using device to device on 500MiB of int32:\n";
     benchMemcpy(131072000);
     std::cout << "\nTesting and Benching Scan on 500MiB of int32: \n";
-    testScan<uint32_t>(131072000);
+    testScan<uint64_t>(131072000);
     std::cout << "\nTesting and Benching Scan on 2GiB of int32: \n";
-    testScan<uint32_t>(524288000);
+    testScan<uint64_t>(524288000);
     std::cout << std::flush;
 
     gpuAssert(cudaPeekAtLastError());

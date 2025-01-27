@@ -284,7 +284,7 @@ lexerTwoKernels1(LexerCtx ctx,
     uint64_t copy_reg[REG_MEM];
     uint8_t *chars_reg = (uint8_t*) copy_reg;
 
-    uint32_t dyn_index = dynamicIndex<uint32_t>(dyn_index_ptr);
+    I dyn_index = dynamicIndex<uint32_t>(dyn_index_ptr);
     I glb_offs = dyn_index * BLOCK_SIZE * ITEMS_PER_THREAD;
     
     states_aux[threadIdx.x] = ctx.to_state(threadIdx.x);
@@ -348,7 +348,7 @@ lexerTwoKernels1(LexerCtx ctx,
 template<typename I, I BLOCK_SIZE, I ITEMS_PER_THREAD>
 __global__ void
 lexerTwoKernels2(state_t* d_states_in,
-                 uint32_t* d_index_out,
+                 I* d_index_out,
                  token_t* d_token_out,
                  volatile State<I>* index_states,
                  I size,

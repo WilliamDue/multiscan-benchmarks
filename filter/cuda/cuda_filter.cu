@@ -323,10 +323,10 @@ filterCoalescedWrite(T* d_in,
 }
 
 void testFilter(int32_t* input, size_t input_size, int32_t* expected, size_t expected_size) {
-    using I = uint32_t;
+    using I = uint64_t;
     const I size = input_size;
     const I BLOCK_SIZE = 256;
-    const I ITEMS_PER_THREAD = 30;
+    const I ITEMS_PER_THREAD = 22;
     const I NUM_LOGICAL_BLOCKS = (size + BLOCK_SIZE * ITEMS_PER_THREAD - 1) / (BLOCK_SIZE * ITEMS_PER_THREAD);
     const I ARRAY_BYTES = size * sizeof(int32_t);
     const I STATES_BYTES = NUM_LOGICAL_BLOCKS * sizeof(State<I>);
@@ -412,10 +412,10 @@ void testFilter(int32_t* input, size_t input_size, int32_t* expected, size_t exp
 }
 
 void testFilterCoalescedWrite(int32_t* input, size_t input_size, int32_t* expected, size_t expected_size) {
-    using I = uint32_t;
+    using I = uint64_t;
     const I size = input_size;
     const I BLOCK_SIZE = 512;
-    const I ITEMS_PER_THREAD = 14;
+    const I ITEMS_PER_THREAD = 10;
     const I NUM_LOGICAL_BLOCKS = (size + BLOCK_SIZE * ITEMS_PER_THREAD - 1) / (BLOCK_SIZE * ITEMS_PER_THREAD);
     const I ARRAY_BYTES = size * sizeof(int32_t);
     const I STATES_BYTES = NUM_LOGICAL_BLOCKS * sizeof(State<I>);
@@ -502,10 +502,10 @@ void testFilterCoalescedWrite(int32_t* input, size_t input_size, int32_t* expect
 }
 
 void testFilterFewerShmemWrite(int32_t* input, size_t input_size, int32_t* expected, size_t expected_size) {
-    using I = uint32_t;
+    using I = uint64_t;
     const I size = input_size;
     const I BLOCK_SIZE = 256;
-    const I ITEMS_PER_THREAD = 30;
+    const I ITEMS_PER_THREAD = 22;
     const I NUM_LOGICAL_BLOCKS = (size + BLOCK_SIZE * ITEMS_PER_THREAD - 1) / (BLOCK_SIZE * ITEMS_PER_THREAD);
     const I ARRAY_BYTES = size * sizeof(int32_t);
     const I STATES_BYTES = NUM_LOGICAL_BLOCKS * sizeof(State<I>);
@@ -593,7 +593,7 @@ void testFilterFewerShmemWrite(int32_t* input, size_t input_size, int32_t* expec
 }
 
 void testFilterCUB(int32_t* input, size_t input_size, int32_t* expected, size_t expected_size) {
-    using I = uint32_t;
+    using I = uint64_t;
     const I size = input_size;
     const I ARRAY_BYTES = size * sizeof(int32_t);
     const I WARMUP_RUNS = 1000;
@@ -675,10 +675,10 @@ void testFilterCUB(int32_t* input, size_t input_size, int32_t* expected, size_t 
 }
 
 void testFilterTwoKernels(int32_t* input, size_t input_size, int32_t* expected, size_t expected_size) {
-    using I = uint32_t;
+    using I = uint64_t;
     const I size = input_size;
     const I BLOCK_SIZE = 256;
-    const I ITEMS_PER_THREAD = 4;
+    const I ITEMS_PER_THREAD = 8;
     const I NUM_LOGICAL_BLOCKS = (size + BLOCK_SIZE * ITEMS_PER_THREAD - 1) / (BLOCK_SIZE * ITEMS_PER_THREAD);
     const I ARRAY_BYTES = size * sizeof(int32_t);
     const I OFFSETS_BYTES = size * sizeof(I);
