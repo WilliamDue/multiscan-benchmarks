@@ -2,9 +2,9 @@
 #include <vector>
 #include <cuda_runtime.h>
 #include <cub/cub.cuh>
-#include "../../common/sps.cu.h"
-#include "../../common/util.cu.h"
-#include "../../common/data.h"
+#include "../common/sps.cu.h"
+#include "../common/util.cu.h"
+#include "../common/data.h"
 #include <unistd.h>
 #define PAD "%-42s "
 

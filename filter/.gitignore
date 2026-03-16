@@ -1,7 +1,5 @@
 *
+!cuda_filter.cu
+!futhark_filter.fut
 !Makefile
-!futhark/
-!cuda/
-!futhark/**
-!cuda/**
 !.gitignore
