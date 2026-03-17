@@ -5,18 +5,23 @@ def segscan_op op (v0, f0, i0) (v1, f1, i1) =
 
 def segreduce' [n] 't (op: t -> t -> t) (ne: t)
                      (flags: [n]bool) (vals: [n]t) =
-  let (segscans, _, idxs) =
-    rotate 1 flags
-    |> map i64.bool 
+  let (segscans, _, offsets) =
+    flags
+    |> map i64.bool
     |> zip3 vals flags
     |> scan (segscan_op op) (ne, false, 0)
     |> unzip3
-  let index i j = if flags[(j + 1) % n] then i-1 else -1
-  let result = scatter (copy vals) (map2 index idxs (iota n)) segscans
-  in if n != 0 then result[:idxs[n - 1]] else result
+  let index f i = if f then i-1 else -1
+  let is = map2 index (rotate 1 flags) offsets
+  let result = scatter (#[scratch] [vals][0]) is segscans
+  let count =
+    scatter (#[scratch] [0])
+            (map (\j -> if j == n - 1 then 0 else -1) (iota n))
+            offsets
+  in result[:count[0]]
 
 entry flags [n] (as : [n]i32) =
-  map (0i32<) as
+  map2 (\i a -> i == 0 || 0i32 < a) (iota n) as
 
 -- ==
 -- input @ randomints_full_500MiB.in
