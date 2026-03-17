@@ -382,9 +382,9 @@ module lexer = mk_lexer {
 }
 
 -- ==
--- input @ ../../data/tokens_dense_500MiB.in
--- input @ ../../data/tokens_moderate_500MiB.in
--- input @ ../../data/tokens_sparse_500MiB.in
+-- input @ ../data/tokens_dense_500MiB.in
+-- input @ ../data/tokens_moderate_500MiB.in
+-- input @ ../data/tokens_sparse_500MiB.in
 entry main (s : []u8) : ([]u32, []u8) =
   match lexer.lex s
   case #some r -> unzip r

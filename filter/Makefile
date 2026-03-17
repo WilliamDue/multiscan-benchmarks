@@ -31,19 +31,19 @@ $(FUTHARK_PROGRAM): $(FUTHARK_PROGRAM).fut
 	futhark cuda --server $< -o $(FUTHARK_PROGRAM)
 
 randomints_sparse_500MiB.out: $(DATA_PATH)/randomints_sparse_500MiB.in
-	futhark script $(FUTHARK_PROGRAM).fut 'expected ($$loaddata "$<")' -b >$@
+	futhark script $(FUTHARK_PROGRAM).fut 'main ($$loaddata "$<")' -b >$@
 
 randomints_dense_500MiB.out: $(DATA_PATH)/randomints_dense_500MiB.in $(FUTHARK_PROGRAM)
-	futhark script ./$(FUTHARK_PROGRAM) 'expected ($$loaddata "$<")' -b >$@
+	futhark script ./$(FUTHARK_PROGRAM) 'main ($$loaddata "$<")' -b >$@
 
 randomints_moderate_500MiB.out: $(DATA_PATH)/randomints_moderate_500MiB.in
-	futhark script ./$(FUTHARK_PROGRAM) 'expected ($$loaddata "$<")' -b >$@
+	futhark script ./$(FUTHARK_PROGRAM) 'main ($$loaddata "$<")' -b >$@
 
 randomints_empty_500MiB.out: $(DATA_PATH)/randomints_empty_500MiB.in
-	futhark script ./$(FUTHARK_PROGRAM) 'expected ($$loaddata "$<")' -b >$@
+	futhark script ./$(FUTHARK_PROGRAM) 'main ($$loaddata "$<")' -b >$@
 
 randomints_full_500MiB.out: $(DATA_PATH)/randomints_full_500MiB.in
-	futhark script ./$(FUTHARK_PROGRAM) 'expected ($$loaddata "$<")' -b >$@
+	futhark script ./$(FUTHARK_PROGRAM) 'main ($$loaddata "$<")' -b >$@
 
 bench: randomints_dense_500MiB.out \
 	   randomints_sparse_500MiB.out \

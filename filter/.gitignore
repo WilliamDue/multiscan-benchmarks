@@ -3,3 +3,4 @@
 !futhark_filter.fut
 !Makefile
 !.gitignore
+!*.pkg

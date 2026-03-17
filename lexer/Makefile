@@ -1,8 +1,6 @@
 DATA_PATH=../data
 COMMON_PATH=../common
-FUTHARK_PATH=./futhark
 FUTHARK_PROGRAM=futhark_lexer
-CUDA_PATH=./cuda
 CUDA_PROGRAM=cuda_lexer
 COMPILER?=nvcc
 FLAGS?=-O3 --std=c++14 -diag-suppress 550
@@ -32,11 +30,11 @@ tokens_moderate_500MiB.out: $(DATA_PATH)/tokens_moderate_500MiB.in $(FUTHARK_PRO
 tokens_sparse_500MiB.out: $(DATA_PATH)/tokens_sparse_500MiB.in $(FUTHARK_PROGRAM)
 	cat $< | ./$(FUTHARK_PROGRAM) -b > $@
 
-$(FUTHARK_PROGRAM): $(FUTHARK_PATH)/$(FUTHARK_PROGRAM).fut
-	(cd futhark && futhark pkg sync)
+$(FUTHARK_PROGRAM): $(FUTHARK_PROGRAM).fut
+	futhark pkg sync
 	futhark cuda $< -o $@
 
-$(CUDA_PROGRAM): $(CUDA_PATH)/$(CUDA_PROGRAM).cu $(COMMON_PATH)/sps.cu.h $(COMMON_PATH)/util.cu.h $(COMMON_PATH)/data.h
+$(CUDA_PROGRAM): $(CUDA_PROGRAM).cu $(COMMON_PATH)/sps.cu.h $(COMMON_PATH)/util.cu.h $(COMMON_PATH)/data.h
 	$(COMPILER) $(FLAGS) -o $@ $<
 
 bench: $(DATA_PATH)/tokens_dense_500MiB.in \
@@ -48,7 +46,7 @@ bench: $(DATA_PATH)/tokens_dense_500MiB.in \
 	   $(FUTHARK_PROGRAM) \
 	   $(CUDA_PROGRAM)
 	@echo -e "$(RED)=== FUTHARK LEXER ===$(DEFAULT)"
-	@futhark bench $(FUTHARK_PATH)/$(FUTHARK_PROGRAM).fut --backend=cuda
+	@futhark bench $(FUTHARK_PROGRAM).fut --backend=cuda
 	@echo -e "$(RED)===============$(DEFAULT)"
 	@echo -e "$(GREEN)=== CUDA LEXER ===$(DEFAULT)"
 	@./$(CUDA_PROGRAM) $(DATA_PATH)/tokens_dense_500MiB.in tokens_dense_500MiB.out
@@ -59,4 +57,4 @@ bench: $(DATA_PATH)/tokens_dense_500MiB.in \
 	@echo -e "$(GREEN)============$(DEFAULT)"
 
 clean:
-	rm -rf $(CUDA_PROGRAM) $(FUTHARK_PROGRAM) *.c *.in *.out $(FUTHARK_PATH)/*.c $(FUTHARK_PATH)/$(FUTHARK_PROGRAM)
+	rm -rf $(CUDA_PROGRAM) $(FUTHARK_PROGRAM) *.c *.in *.out *.c $(FUTHARK_PROGRAM)

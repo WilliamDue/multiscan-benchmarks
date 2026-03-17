@@ -1,7 +1,6 @@
 *
 !Makefile
-!futhark/
-!cuda/
-!futhark/**
-!cuda/**
+!futhark_lexer.fut
+!cuda_lexer.cu
+!*.pkg
 !.gitignore

@@ -1,9 +1,9 @@
 #include <iostream>
 #include <vector>
 #include <cuda_runtime.h>
-#include "../../common/sps.cu.h"
-#include "../../common/util.cu.h"
-#include "../../common/data.h"
+#include "../common/sps.cu.h"
+#include "../common/util.cu.h"
+#include "../common/data.h"
 #include <math.h>
 #define PAD "%-38s "
 

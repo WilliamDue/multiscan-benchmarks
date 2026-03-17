@@ -1,7 +1,6 @@
 *
 !Makefile
-!futhark/
-!cuda/
-!futhark/**
-!cuda/**
+!futhark_partition.fut
+!cuda_partition.cu
 !.gitignore
+!*.pkg
