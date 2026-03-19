@@ -81,6 +81,56 @@ filter(T* d_in,
 
 template<typename T, typename I, typename PRED, I BLOCK_SIZE, I ITEMS_PER_THREAD>
 __global__ void
+filterBoolArray(T* d_in,
+       T* d_out,
+       volatile State<I>* states,
+       I size,
+       I num_logical_blocks,
+       PRED pred,
+       volatile uint32_t* dyn_idx_ptr,
+       volatile I* new_size) {
+    volatile __shared__ I block[ITEMS_PER_THREAD * BLOCK_SIZE];
+    volatile __shared__ I block_aux[BLOCK_SIZE];
+    T elems[ITEMS_PER_THREAD];
+    bool bools[ITEMS_PER_THREAD];
+
+    uint32_t dyn_idx = dynamicIndex<uint32_t>(dyn_idx_ptr);
+    I glb_offs = dyn_idx * BLOCK_SIZE * ITEMS_PER_THREAD;
+
+    #pragma unroll
+    for (I i = 0; i < ITEMS_PER_THREAD; i++) {
+        I lid = i * blockDim.x + threadIdx.x;
+        I gid = glb_offs + lid;
+        if (gid < size) {
+            elems[i] = d_in[gid];
+            bool temp = pred(elems[i]);
+            bools[i] = temp;
+            block[lid] = temp;
+        } else {
+            block[lid] = 0;
+        }
+    }
+    __syncthreads();
+
+    scan<I, I, Add<I>, ITEMS_PER_THREAD>(block, block_aux, states, Add<I>(), 0, dyn_idx);
+
+    #pragma unroll
+    for (I i = 0; i < ITEMS_PER_THREAD; i++) {
+        I lid = blockDim.x * i + threadIdx.x;
+        I gid = glb_offs + lid;
+        if (gid < size && bools[i]) {
+            d_out[block[lid] - 1] = elems[i];
+        }
+    }
+    
+    if (dyn_idx == num_logical_blocks - 1 && threadIdx.x == blockDim.x - 1) {
+        *new_size = block[ITEMS_PER_THREAD * BLOCK_SIZE - 1];
+    }
+    __syncthreads();
+}
+
+template<typename T, typename I, typename PRED, I BLOCK_SIZE, I ITEMS_PER_THREAD>
+__global__ void
 filterTwoKernel1(T* d_in,
                  I* d_out,
                  I* d_flags_out,
@@ -395,6 +445,95 @@ void testFilter(int32_t* input, size_t input_size, int32_t* expected, size_t exp
 
             if (!test_passes) {
                 std::cout << "Filter Test Failed: Due to elements mismatch at index=" << i << ".\n";
+            }
+        } 
+    }
+
+    if (test_passes) {
+        compute_descriptors(temp, RUNS, ARRAY_BYTES + temp_size * sizeof(int32_t));
+    }
+
+    free(temp);
+    gpuAssert(cudaFree(d_in));
+    gpuAssert(cudaFree(d_out));
+    gpuAssert(cudaFree(d_states));
+    gpuAssert(cudaFree(d_dyn_idx_ptr));
+    gpuAssert(cudaFree(d_new_size));
+}
+
+void testFilterBoolArray(int32_t* input, size_t input_size, int32_t* expected, size_t expected_size) {
+    using I = uint64_t;
+    const I size = input_size;
+    const I BLOCK_SIZE = 256;
+    const I ITEMS_PER_THREAD = 22;
+    const I NUM_LOGICAL_BLOCKS = (size + BLOCK_SIZE * ITEMS_PER_THREAD - 1) / (BLOCK_SIZE * ITEMS_PER_THREAD);
+    const I ARRAY_BYTES = size * sizeof(int32_t);
+    const I STATES_BYTES = NUM_LOGICAL_BLOCKS * sizeof(State<I>);
+    const I WARMUP_RUNS = 1000;
+    const I RUNS = 500;
+    assert(ITEMS_PER_THREAD <= 32);
+
+    std::vector<int32_t> h_in(size);
+    std::vector<int32_t> h_out(size, 0);
+
+    for (I i = 0; i < size; ++i) {
+        h_in[i] = input[i];
+    }
+    
+    uint32_t* d_dyn_idx_ptr;
+    I* d_new_size;
+    int32_t *d_in, *d_out;
+    State<I>* d_states;
+    gpuAssert(cudaMalloc((void**)&d_dyn_idx_ptr, sizeof(uint32_t)));
+    gpuAssert(cudaMalloc((void**)&d_new_size, sizeof(I)));
+    cudaMemset(d_dyn_idx_ptr, 0, sizeof(uint32_t));
+    gpuAssert(cudaMalloc((void**)&d_states, STATES_BYTES));
+    gpuAssert(cudaMalloc((void**)&d_in, ARRAY_BYTES));
+    gpuAssert(cudaMalloc((void**)&d_out, ARRAY_BYTES));
+    
+    gpuAssert(cudaMemcpy(d_in, h_in.data(), ARRAY_BYTES, cudaMemcpyHostToDevice));
+    
+    Predicate pred = Predicate();
+    
+    float * temp = (float *) malloc(sizeof(float) * RUNS);
+    cudaEvent_t start, stop;
+    cudaEventCreate(&start);
+    cudaEventCreate(&stop);
+
+    for (I i = 0; i < WARMUP_RUNS; ++i) {
+        filterBoolArray<int32_t, I, Predicate, BLOCK_SIZE, ITEMS_PER_THREAD><<<NUM_LOGICAL_BLOCKS, BLOCK_SIZE>>>(d_in, d_out, d_states, size, NUM_LOGICAL_BLOCKS, pred, d_dyn_idx_ptr, d_new_size);
+        cudaDeviceSynchronize();
+        cudaMemset(d_dyn_idx_ptr, 0, sizeof(uint32_t));
+        gpuAssert(cudaPeekAtLastError());
+    }
+
+    for (I i = 0; i < RUNS; ++i) {
+        cudaEventRecord(start, 0);
+        filterBoolArray<int32_t, I, Predicate, BLOCK_SIZE, ITEMS_PER_THREAD><<<NUM_LOGICAL_BLOCKS, BLOCK_SIZE>>>(d_in, d_out, d_states, size, NUM_LOGICAL_BLOCKS, pred, d_dyn_idx_ptr, d_new_size);
+        cudaDeviceSynchronize();
+        cudaEventRecord(stop, 0);
+        cudaEventSynchronize(stop);
+        cudaEventElapsedTime(temp + i, start, stop);
+        cudaMemset(d_dyn_idx_ptr, 0, sizeof(uint32_t));
+        cudaMemset(d_new_size, 0, sizeof(I));
+        gpuAssert(cudaPeekAtLastError());
+    }
+
+    I temp_size = 0;
+    filterBoolArray<int32_t, I, Predicate, BLOCK_SIZE, ITEMS_PER_THREAD><<<NUM_LOGICAL_BLOCKS, BLOCK_SIZE>>>(d_in, d_out, d_states, size, NUM_LOGICAL_BLOCKS, pred, d_dyn_idx_ptr, d_new_size);
+    cudaDeviceSynchronize();
+    gpuAssert(cudaMemcpy(h_out.data(), d_out, ARRAY_BYTES, cudaMemcpyDeviceToHost));
+    gpuAssert(cudaMemcpy(&temp_size, d_new_size, sizeof(I), cudaMemcpyDeviceToHost));
+    
+    bool test_passes = temp_size == expected_size;
+    if (!test_passes) {
+        std::cout << "Filter Bool Array Test Failed: Expected size=" << expected_size << " but got size=" << temp_size << ".\n";
+    } else {
+        for (I i = 0; i < expected_size; ++i) {
+            test_passes &= h_out[i] == expected[i];
+
+            if (!test_passes) {
+                std::cout << "Filter Bool Array Test Failed: Due to elements mismatch at index=" << i << ".\n";
             }
         } 
     }
@@ -829,6 +968,8 @@ int main(int32_t argc, char *argv[]) {
     printf("%s:\n", argv[1]);
     printf(PAD, "Filter:");
     testFilter(input, input_size, expected, expected_size);
+    printf(PAD, "Filter Bool Array:");
+    testFilterBoolArray(input, input_size, expected, expected_size);
     printf(PAD, "Filter Coalesced Write:");
     testFilterCoalescedWrite(input, input_size, expected, expected_size);
     printf(PAD, "Filter With Fewer Shared Memory Writes:");
