@@ -33,7 +33,7 @@ $(FUTHARK_PROGRAM): $(FUTHARK_PROGRAM).fut
 randomints_sparse_500MiB.out: $(DATA_PATH)/randomints_sparse_500MiB.in
 	futhark script $(FUTHARK_PROGRAM).fut 'main ($$loaddata "$<")' -b >$@
 
-randomints_dense_500MiB.out: $(DATA_PATH)/randomints_dense_500MiB.in $(FUTHARK_PROGRAM)
+randomints_dense_500MiB.out: $(DATA_PATH)/randomints_dense_500MiB.in
 	futhark script ./$(FUTHARK_PROGRAM) 'main ($$loaddata "$<")' -b >$@
 
 randomints_moderate_500MiB.out: $(DATA_PATH)/randomints_moderate_500MiB.in
